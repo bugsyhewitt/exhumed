@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bugsyhewitt/exhumed/internal/db"
 	"github.com/bugsyhewitt/exhumed/internal/engine"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
 	"github.com/bugsyhewitt/exhumed/internal/traversal"
@@ -28,6 +29,7 @@ type scanFlags struct {
 	insecure       bool
 	traversalDepth int
 	verbose        bool
+	dbPath         string
 }
 
 func newScanCmd() *cobra.Command {
@@ -36,14 +38,18 @@ func newScanCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scan",
 		Short: "Scan a URL for LFI vulnerabilities",
-		Long: `scan fires traversal payloads at a target URL parameter and prints raw responses.
+		Long: `scan loads the file database and fires traversal payloads at a target URL
+parameter, walking every database entry to find readable files.
 
-The URL must contain the marker string (default FUZZ) to indicate the injection
-point. Example:
+The URL must contain the marker string (default FUZZ) at the injection point:
 
   exhumed scan --url "http://target.local/?file=FUZZ"
 
-Packet 01: raw responses only. Detection and extraction arrive in Packets 03–04.`,
+The database is loaded from --db (default: database/).
+Use --db database/_raw to scan against the unfiltered raw corpus.
+
+Hit-confirmation using the confirm block is Packet 03 — this packet prints
+raw HTTP responses and notes "(confirmation: Packet 03)".`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runScan(f)
 		},
@@ -62,6 +68,8 @@ Packet 01: raw responses only. Detection and extraction arrive in Packets 03–0
 	cmd.Flags().BoolVar(&f.insecure, "insecure", false, "Skip TLS certificate verification")
 	cmd.Flags().IntVar(&f.traversalDepth, "traversal-depth", 8, "Max directory traversal depth")
 	cmd.Flags().BoolVarP(&f.verbose, "verbose", "v", false, "Verbose output")
+	// --db is resolved relative to the process working directory.
+	cmd.Flags().StringVar(&f.dbPath, "db", "database", "path to database root (default: database/ in working directory)")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -72,6 +80,30 @@ func runScan(f scanFlags) error {
 	// Fast-fail if the marker is not present in the URL or request body.
 	if !strings.Contains(f.url, f.marker) && !strings.Contains(f.data, f.marker) {
 		return fmt.Errorf("marker %q not found in --url or --data; add it at the injection point", f.marker)
+	}
+
+	// Load the database. LoadCurated excludes _raw/ for default scans;
+	// passing --db database/_raw loads raw corpus directly.
+	var database *db.Database
+	var err error
+
+	if strings.HasSuffix(strings.TrimRight(f.dbPath, "/\\"), "_raw") {
+		database, err = db.LoadDir(f.dbPath)
+	} else {
+		database, err = db.LoadCurated(f.dbPath)
+	}
+	if err != nil {
+		return fmt.Errorf("load database %q: %w", f.dbPath, err)
+	}
+
+	entries := database.AllEntries()
+	if len(entries) == 0 {
+		fmt.Fprintf(os.Stderr, "info: database at %q is empty — add curated entries (Packet 02b) or use --db database/_raw for the raw corpus\n", f.dbPath)
+		return nil
+	}
+
+	if f.verbose {
+		fmt.Fprintf(os.Stderr, "[*] Loaded %d entries from %q\n", len(entries), f.dbPath)
 	}
 
 	// Build the request template from flags.
@@ -97,7 +129,7 @@ func runScan(f scanFlags) error {
 		tmpl.Body = []byte(f.data)
 	}
 
-	// Report which surfaces the marker was found in.
+	// Report injection surfaces.
 	surfaces := inject.FindSurfaces(tmpl, f.marker)
 	if len(surfaces) == 0 {
 		return fmt.Errorf("marker %q not found in any injection surface of the request", f.marker)
@@ -106,23 +138,6 @@ func runScan(f scanFlags) error {
 		fmt.Fprintf(os.Stderr, "[*] Injection surfaces: %v\n", surfaces)
 	}
 
-	// Demo: generate traversal payloads for a single hardcoded path so the
-	// full pipeline is exercisable end-to-end in Packet 01.
-	// Packet 02/03 will replace this with the database-driven file list.
-	demoPath := "etc/passwd"
-	payloads := traversal.Generate(demoPath, f.traversalDepth)
-
-	if f.verbose {
-		fmt.Fprintf(os.Stderr, "[*] Generated %d payloads for demo path %q\n", len(payloads), demoPath)
-	}
-
-	// Build concrete requests by injecting each payload.
-	reqs := make([]engine.Request, 0, len(payloads))
-	for _, p := range payloads {
-		reqs = append(reqs, inject.Substitute(tmpl, f.marker, p.Value))
-	}
-
-	// Fire requests.
 	eng := engine.New(engine.Config{
 		Concurrency: f.concurrency,
 		RatePerSec:  f.rate,
@@ -132,23 +147,38 @@ func runScan(f scanFlags) error {
 	})
 
 	ctx := context.Background()
-	results := eng.Run(ctx, reqs)
+	total := 0
 
-	// Print raw results.
-	for i, r := range results {
-		if r.Err != nil {
-			fmt.Fprintf(os.Stderr, "[!] %s — %v\n", r.URL, r.Err)
-			continue
+	// Walk every database entry; for each, generate traversal payloads and fire.
+	for _, entry := range entries {
+		payloads := traversal.Generate(entry.Entry.Path, f.traversalDepth)
+
+		reqs := make([]engine.Request, len(payloads))
+		for i, p := range payloads {
+			reqs[i] = inject.Substitute(tmpl, f.marker, p.Value)
 		}
-		tech := payloads[i].Technique
-		fmt.Printf("[%d] %s  technique=%s  status=%d  bytes=%d  elapsed=%s\n",
-			i+1, r.URL, tech, r.StatusCode, len(r.Body), r.Elapsed.Round(time.Millisecond))
-		if f.verbose && len(r.Body) > 0 {
-			preview := string(r.Body)
-			if len(preview) > 256 {
-				preview = preview[:256] + "…"
+
+		results := eng.Run(ctx, reqs)
+
+		for i, r := range results {
+			total++
+			if r.Err != nil {
+				if f.verbose {
+					fmt.Fprintf(os.Stderr, "[!] %s — %v\n", r.URL, r.Err)
+				}
+				continue
 			}
-			fmt.Printf("    %s\n", strings.ReplaceAll(preview, "\n", "\n    "))
+			tech := payloads[i].Technique
+			fmt.Printf("[%d] entry=%s technique=%s status=%d bytes=%d elapsed=%s (confirmation: Packet 03)\n",
+				total, entry.Entry.ID, tech, r.StatusCode, len(r.Body), r.Elapsed.Round(time.Millisecond))
+			if f.verbose && len(r.Body) > 0 {
+				preview := string(r.Body)
+				if len(preview) > 256 {
+					preview = preview[:256] + "…"
+				}
+				fmt.Printf("    url: %s\n    %s\n", r.URL,
+					strings.ReplaceAll(preview, "\n", "\n    "))
+			}
 		}
 	}
 
