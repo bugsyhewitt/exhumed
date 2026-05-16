@@ -29,4 +29,5 @@ func init() {
 	rootCmd.AddCommand(newScanCmd())
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newUpdateCmd())
+	rootCmd.AddCommand(newDBCmd())
 }
