@@ -1,0 +1,205 @@
+schema_version: 1
+group:
+  id: raw-webservers
+  name: Raw Web Server Configuration Files
+  description: 'Unfiltered harvest of web server configuration and log paths (Apache, nginx, IIS, lighttpd, Tomcat).'
+  os: [linux, windows, bsd, macos]
+  category: webserver
+entries:
+  - id: apache2-conf
+    name: '/etc/apache2/apache2.conf'
+    description: 'Apache2 main configuration; reveals server layout, module config, and DocumentRoot.'
+    path: '/etc/apache2/apache2.conf'
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'ServerRoot'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache2-htpasswd
+    name: '/etc/apache2/.htpasswd'
+    description: 'Apache htpasswd file; contains hashed HTTP basic auth credentials.'
+    path: '/etc/apache2/.htpasswd'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^[^:]+:\$apr1\$|^[^:]+:\{SHA\}'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache2-httpd-conf
+    name: '/etc/apache2/httpd.conf'
+    description: 'Apache httpd main config alternative location.'
+    path: '/etc/apache2/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'ServerRoot'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: httpd-conf-centos
+    name: '/etc/httpd/conf/httpd.conf'
+    description: 'Apache httpd config on RHEL/CentOS systems.'
+    path: '/etc/httpd/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'ServerRoot'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: nginx-conf
+    name: '/etc/nginx/nginx.conf'
+    description: 'nginx main configuration; reveals server blocks, upstream definitions, and log paths.'
+    path: '/etc/nginx/nginx.conf'
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'worker_processes'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: nginx-sites-enabled-default
+    name: '/etc/nginx/sites-enabled/default'
+    description: 'nginx default site configuration; reveals document root and proxy rules.'
+    path: '/etc/nginx/sites-enabled/default'
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'server_name'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache2-access-log
+    name: '/var/log/apache2/access.log'
+    description: 'Apache access log; reveals request patterns, user agents, and IP addresses. Also useful for log poisoning (Packet 04+).'
+    path: '/var/log/apache2/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache2-error-log
+    name: '/var/log/apache2/error.log'
+    description: 'Apache error log; may reveal internal paths, PHP errors, and server configuration details.'
+    path: '/var/log/apache2/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '[error]'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: nginx-access-log
+    name: '/var/log/nginx/access.log'
+    description: 'nginx access log.'
+    path: '/var/log/nginx/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: nginx-error-log
+    name: '/var/log/nginx/error.log'
+    description: 'nginx error log.'
+    path: '/var/log/nginx/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '[error]'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: tomcat-users-xml
+    name: '/etc/tomcat9/tomcat-users.xml'
+    description: 'Tomcat user configuration; contains plaintext or hashed Tomcat manager credentials.'
+    path: '/etc/tomcat9/tomcat-users.xml'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'tomcat-users'
+    alt_paths:
+      - '/etc/tomcat8/tomcat-users.xml'
+      - '/opt/tomcat/conf/tomcat-users.xml'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: iis-web-config
+    name: 'C:\inetpub\wwwroot\web.config'
+    description: 'IIS web application configuration; may contain connection strings and auth configuration.'
+    path: 'C:\inetpub\wwwroot\web.config'
+    os: [windows]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '<configuration>'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Windows/Windows-Paths.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: iis-applicationhost-config
+    name: 'C:\Windows\System32\inetsrv\config\applicationHost.config'
+    description: 'IIS ApplicationHost.config; global IIS configuration including application pool credentials.'
+    path: 'C:\Windows\System32\inetsrv\config\applicationHost.config'
+    os: [windows]
+    info_goal: config
+    privilege: elevated
+    confirm:
+      type: keyword
+      patterns:
+        - 'applicationPools'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Windows/Windows-Paths.txt
+    tags: [raw, needs-confirm-review]

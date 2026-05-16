@@ -1,0 +1,199 @@
+schema_version: 1
+group:
+  id: raw-applications
+  name: Raw Application Configuration Files
+  description: 'Unfiltered harvest of CMS and web application config paths (WordPress, Joomla, Drupal, Laravel, Django, Rails).'
+  os: [linux, windows]
+  category: application
+entries:
+  - id: wp-config-php
+    name: '/var/www/html/wp-config.php'
+    description: 'WordPress main configuration; contains database credentials, secret keys, and table prefix.'
+    path: '/var/www/html/wp-config.php'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'DB_PASSWORD'
+    alt_paths:
+      - '/var/www/wordpress/wp-config.php'
+      - '/srv/www/wordpress/wp-config.php'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: wp-config-php-win
+    name: 'C:\inetpub\wwwroot\wp-config.php'
+    description: 'WordPress configuration on Windows/IIS; contains database credentials.'
+    path: 'C:\inetpub\wwwroot\wp-config.php'
+    os: [windows]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'DB_PASSWORD'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Windows/Windows-Paths.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: joomla-configuration-php
+    name: '/var/www/html/configuration.php'
+    description: 'Joomla main configuration; contains database credentials and secret.'
+    path: '/var/www/html/configuration.php'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'JConfig'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: drupal-settings-php
+    name: '/var/www/html/sites/default/settings.php'
+    description: 'Drupal settings; contains database credentials and hash salt.'
+    path: '/var/www/html/sites/default/settings.php'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '$databases'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: laravel-env
+    name: '/var/www/html/.env'
+    description: 'Laravel environment file; contains database credentials, app key, and API tokens.'
+    path: '/var/www/html/.env'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'APP_KEY='
+    alt_paths:
+      - '/var/www/.env'
+      - '/srv/www/.env'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: django-settings-py
+    name: '/var/www/html/settings.py'
+    description: 'Django settings; contains SECRET_KEY, database credentials, and ALLOWED_HOSTS.'
+    path: '/var/www/html/settings.py'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'SECRET_KEY'
+    alt_paths:
+      - '/var/www/app/settings.py'
+      - '/opt/app/settings.py'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: rails-database-yml
+    name: '/var/www/html/config/database.yml'
+    description: 'Ruby on Rails database configuration; contains credentials for development, test, and production.'
+    path: '/var/www/html/config/database.yml'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'adapter:'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: rails-secrets-yml
+    name: '/var/www/html/config/secrets.yml'
+    description: 'Rails secrets; contains secret_key_base and may include API tokens.'
+    path: '/var/www/html/config/secrets.yml'
+    os: [linux]
+    info_goal: tokens
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'secret_key_base'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: magento-local-xml
+    name: '/var/www/html/app/etc/local.xml'
+    description: 'Magento 1.x configuration; contains database credentials and crypt key.'
+    path: '/var/www/html/app/etc/local.xml'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '<crypt>'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: magento2-env-php
+    name: '/var/www/html/app/etc/env.php'
+    description: 'Magento 2 environment config; contains database credentials, cache backends, and encryption key.'
+    path: '/var/www/html/app/etc/env.php'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - "'db'"
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: symfony-parameters-yml
+    name: '/var/www/html/app/config/parameters.yml'
+    description: 'Symfony parameters; contains database credentials and mailer configuration.'
+    path: '/var/www/html/app/config/parameters.yml'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'database_password'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: phpinfo
+    name: '/phpinfo.php'
+    description: 'PHP info page left on server; reveals PHP version, configuration, and loaded modules.'
+    path: '/phpinfo.php'
+    os: [linux, windows]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'PHP Version'
+    alt_paths:
+      - '/info.php'
+      - '/php_info.php'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
