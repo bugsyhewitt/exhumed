@@ -1,0 +1,19 @@
+schema_version: 1
+group:
+  id: missing-required
+  name: Missing Required
+  description: Fixture with missing required fields.
+  os: [linux]
+  category: os
+entries:
+  - id: missing-desc
+    name: Missing Description
+    description: ""
+    path: /etc/test
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - test
