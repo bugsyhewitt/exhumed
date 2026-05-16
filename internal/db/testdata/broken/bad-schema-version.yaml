@@ -1,0 +1,19 @@
+schema_version: 99
+group:
+  id: bad-version
+  name: Bad Version
+  description: Fixture with unsupported schema version.
+  os: [linux]
+  category: os
+entries:
+  - id: entry1
+    name: Entry 1
+    description: Entry with bad schema version.
+    path: /etc/test
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - test

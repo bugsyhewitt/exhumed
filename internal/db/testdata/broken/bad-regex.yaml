@@ -1,0 +1,19 @@
+schema_version: 1
+group:
+  id: broken-regex
+  name: Broken Regex
+  description: Fixture with an invalid regex pattern.
+  os: [linux]
+  category: os
+entries:
+  - id: bad-regex-entry
+    name: Bad Regex Entry
+    description: This entry has an invalid regex that should fail at load time.
+    path: /etc/test
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '[invalid regex ('

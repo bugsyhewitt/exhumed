@@ -1,0 +1,31 @@
+schema_version: 1
+group:
+  id: duplicate-group
+  name: Duplicate ID
+  description: Fixture with duplicate entry IDs within one file.
+  os: [linux]
+  category: os
+entries:
+  - id: same-id
+    name: First Entry
+    description: First entry with this ID.
+    path: /etc/test1
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - test
+
+  - id: same-id
+    name: Second Entry
+    description: Second entry with the same ID — should be rejected.
+    path: /etc/test2
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - test
