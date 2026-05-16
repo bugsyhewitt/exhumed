@@ -99,54 +99,62 @@ func New(cfg Config) *Engine {
 	return e
 }
 
-// Run processes all requests in reqs and returns results in order.
-// It starts workers, fans out reqs, collects results, and closes when done.
+// indexedResult pairs a Result with the original request index so the output
+// slice preserves input order regardless of worker completion order.
+type indexedResult struct {
+	idx    int
+	result Result
+}
+
+// Run processes all requests in reqs and returns results in the same order as
+// the input slice. Workers complete in non-deterministic order; results are
+// placed into indexed slots before returning.
 // Cancelling ctx causes all in-flight requests to abort.
 func (e *Engine) Run(ctx context.Context, reqs []Request) []Result {
-	out := make([]Result, 0, len(reqs))
+	if len(reqs) == 0 {
+		return nil
+	}
 
-	done := make(chan struct{})
-	jobs := make(chan Request, len(reqs))
+	type indexedJob struct {
+		idx int
+		req Request
+	}
 
-	resultCh := make(chan Result, len(reqs))
+	jobs := make(chan indexedJob, len(reqs))
+	resultCh := make(chan indexedResult, len(reqs))
 
 	for i := 0; i < e.cfg.Concurrency; i++ {
 		go func() {
-			for req := range jobs {
+			for j := range jobs {
 				select {
 				case <-ctx.Done():
-					resultCh <- Result{URL: req.URL, Err: ctx.Err()}
+					resultCh <- indexedResult{j.idx, Result{URL: j.req.URL, Err: ctx.Err()}}
 					continue
 				default:
 				}
 
 				if e.limiter != nil {
 					if err := e.limiter.Wait(ctx); err != nil {
-						resultCh <- Result{URL: req.URL, Err: err}
+						resultCh <- indexedResult{j.idx, Result{URL: j.req.URL, Err: err}}
 						continue
 					}
 				}
 
-				resultCh <- e.do(ctx, req)
+				resultCh <- indexedResult{j.idx, e.do(ctx, j.req)}
 			}
 		}()
 	}
 
-	go func() {
-		for _, r := range reqs {
-			jobs <- r
-		}
-		close(jobs)
-	}()
+	for i, r := range reqs {
+		jobs <- indexedJob{i, r}
+	}
+	close(jobs)
 
-	go func() {
-		for range reqs {
-			out = append(out, <-resultCh)
-		}
-		close(done)
-	}()
-
-	<-done
+	out := make([]Result, len(reqs))
+	for range reqs {
+		ir := <-resultCh
+		out[ir.idx] = ir.result
+	}
 	return out
 }
 
