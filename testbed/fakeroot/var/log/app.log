@@ -1,0 +1,4 @@
+2026-01-15 10:00:01 INFO  Application started
+2026-01-15 10:00:02 INFO  Database connection established
+2026-01-15 10:05:33 WARN  Slow query detected: SELECT * FROM users (450ms)
+2026-01-15 10:12:44 ERROR Failed to process request: invalid token

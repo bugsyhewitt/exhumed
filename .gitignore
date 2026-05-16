@@ -1,0 +1,16 @@
+# Build output
+/exhumed
+/dist/
+
+# Go workspace
+/vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
