@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bugsyhewitt/exhumed/internal/chain"
 	"github.com/bugsyhewitt/exhumed/internal/db"
 	"github.com/bugsyhewitt/exhumed/internal/detect"
 	"github.com/bugsyhewitt/exhumed/internal/engine"
+	"github.com/bugsyhewitt/exhumed/internal/extract"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
 	"github.com/bugsyhewitt/exhumed/internal/traversal"
 	"github.com/spf13/cobra"
@@ -32,6 +34,9 @@ type scanFlags struct {
 	verbose        bool
 	dbPath         string
 	onlyHits       bool
+	showSecrets    bool
+	maxDepth       int
+	maxTargets     int
 }
 
 func newScanCmd() *cobra.Command {
@@ -47,11 +52,9 @@ The URL must contain the marker string (default FUZZ) at the injection point:
 
   exhumed scan --url "http://target.local/?file=FUZZ"
 
-The database is loaded from --db (default: database/).
-Use --db database/_raw to scan against the unfiltered raw corpus.
-
-Confirmed hits use the confirm block from each database entry.
-Use --only-hits to suppress unconfirmed responses from output.`,
+Confirmed hits use the confirm block from each database entry. Extracted
+findings feed a follow-on chain engine that queues derived targets (SSH keys
+from home dirs, etc.) up to --max-depth generations.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runScan(f)
 		},
@@ -71,8 +74,10 @@ Use --only-hits to suppress unconfirmed responses from output.`,
 	cmd.Flags().IntVar(&f.traversalDepth, "traversal-depth", 8, "Max directory traversal depth")
 	cmd.Flags().BoolVarP(&f.verbose, "verbose", "v", false, "Verbose output")
 	cmd.Flags().BoolVar(&f.onlyHits, "only-hits", false, "Suppress unconfirmed responses from output")
-	// --db is resolved relative to the process working directory.
-	cmd.Flags().StringVar(&f.dbPath, "db", "database", "path to database root (default: database/ in working directory)")
+	cmd.Flags().BoolVar(&f.showSecrets, "show-secrets", false, "Print secret values in full (default: partially redacted)")
+	cmd.Flags().IntVar(&f.maxDepth, "max-depth", 3, "Max follow-on chain depth (0 = disable chaining)")
+	cmd.Flags().IntVar(&f.maxTargets, "max-targets", 500, "Hard cap on total follow-on targets")
+	cmd.Flags().StringVar(&f.dbPath, "db", "database", "Path to database root")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -86,20 +91,17 @@ type hitRecord struct {
 	technique string
 	status    int
 	snippets  []string
+	findings  []extract.Finding
 	elapsed   time.Duration
 }
 
 func runScan(f scanFlags) error {
-	// Fast-fail if the marker is not present in the URL or request body.
 	if !strings.Contains(f.url, f.marker) && !strings.Contains(f.data, f.marker) {
 		return fmt.Errorf("marker %q not found in --url or --data; add it at the injection point", f.marker)
 	}
 
-	// Load the database. LoadCurated excludes _raw/ for default scans;
-	// passing --db database/_raw loads raw corpus directly.
 	var database *db.Database
 	var err error
-
 	if strings.HasSuffix(strings.TrimRight(f.dbPath, "/\\"), "_raw") {
 		database, err = db.LoadDir(f.dbPath)
 	} else {
@@ -111,7 +113,7 @@ func runScan(f scanFlags) error {
 
 	entries := database.AllEntries()
 	if len(entries) == 0 {
-		fmt.Fprintf(os.Stderr, "info: database at %q is empty — add curated entries (Packet 02b) or use --db database/_raw for the raw corpus\n", f.dbPath)
+		fmt.Fprintf(os.Stderr, "info: database at %q is empty\n", f.dbPath)
 		return nil
 	}
 
@@ -119,9 +121,7 @@ func runScan(f scanFlags) error {
 		fmt.Fprintf(os.Stderr, "[*] Loaded %d entries from %q\n", len(entries), f.dbPath)
 	}
 
-	// Build the request template from flags.
 	tmpl := inject.NewRequest(f.method, f.url)
-
 	for _, h := range f.headers {
 		parts := strings.SplitN(h, ":", 2)
 		if len(parts) != 2 {
@@ -129,7 +129,6 @@ func runScan(f scanFlags) error {
 		}
 		tmpl.Headers.Set(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
 	}
-
 	for _, c := range f.cookies {
 		parts := strings.SplitN(c, "=", 2)
 		if len(parts) != 2 {
@@ -137,15 +136,13 @@ func runScan(f scanFlags) error {
 		}
 		tmpl.Cookies[parts[0]] = parts[1]
 	}
-
 	if f.data != "" {
 		tmpl.Body = []byte(f.data)
 	}
 
-	// Report injection surfaces.
 	surfaces := inject.FindSurfaces(tmpl, f.marker)
 	if len(surfaces) == 0 {
-		return fmt.Errorf("marker %q not found in any injection surface of the request", f.marker)
+		return fmt.Errorf("marker %q not found in any injection surface", f.marker)
 	}
 	if f.verbose {
 		fmt.Fprintf(os.Stderr, "[*] Injection surfaces: %v\n", surfaces)
@@ -160,61 +157,46 @@ func runScan(f scanFlags) error {
 	})
 
 	ctx := context.Background()
+	chainQ := chain.New(chain.Config{MaxDepth: f.maxDepth, MaxTargets: f.maxTargets})
+
 	var hits []hitRecord
-	total := 0
-	confirmed := 0
+	total, confirmed := 0, 0
 
-	// Walk every database entry; for each, generate traversal payloads and fire.
+	// Phase 1: walk every database entry.
 	for _, entry := range entries {
-		payloads := traversal.Generate(entry.Entry.Path, f.traversalDepth)
-
-		reqs := make([]engine.Request, len(payloads))
-		for i, p := range payloads {
-			reqs[i] = inject.Substitute(tmpl, f.marker, p.Value)
+		rec, requests := scanEntry(ctx, eng, tmpl, f, entry)
+		total += requests
+		if rec != nil {
+			confirmed++
+			hits = append(hits, *rec)
+			printHit(*rec, f.showSecrets)
+			// Feed extraction findings into chain engine.
+			chainQ.Enqueue(rec.findings)
 		}
+	}
 
-		results := eng.Run(ctx, reqs)
-
-		for i, r := range results {
-			total++
-			if r.Err != nil {
-				if f.verbose {
-					fmt.Fprintf(os.Stderr, "[!] %s — %v\n", r.URL, r.Err)
-				}
-				continue
-			}
-
-			d := detect.Check(entry, r)
-			tech := payloads[i].Technique
-
-			if d.Hit {
+	// Phase 2: walk follow-on chain targets.
+	chainTargets := chainQ.Targets()
+	if len(chainTargets) > 0 && f.maxDepth > 0 {
+		fmt.Printf("\n── Follow-on chain (%d targets) ──────────────────────\n", len(chainTargets))
+		for _, tgt := range chainTargets {
+			// Synthesise a minimal entry for the chain target using the best-effort parser.
+			chainEntry := synthEntry(tgt.Path)
+			rec, requests := scanEntry(ctx, eng, tmpl, f, chainEntry)
+			total += requests
+			if rec != nil {
 				confirmed++
-				rec := hitRecord{
-					entryID:   entry.Entry.ID,
-					path:      entry.Entry.Path,
-					technique: tech,
-					status:    r.StatusCode,
-					snippets:  d.Snippets,
-					elapsed:   r.Elapsed,
-				}
-				hits = append(hits, rec)
-				fmt.Printf("[CONFIRMED] entry=%s path=%s technique=%s status=%d elapsed=%s\n",
-					entry.Entry.ID, entry.Entry.Path, tech,
-					r.StatusCode, r.Elapsed.Round(time.Millisecond))
-				for _, snip := range d.Snippets {
-					fmt.Printf("    snippet: %s\n", snip)
-				}
-			} else if !f.onlyHits {
-				fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
-					entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
+				hits = append(hits, *rec)
+				fmt.Printf("[CHAIN-HIT depth=%d via=%s]\n", tgt.Depth, tgt.FromFinding)
+				printHit(*rec, f.showSecrets)
 			}
 		}
 	}
 
-	// Summary
+	// Summary.
 	fmt.Printf("\n── Scan complete ──────────────────────────────────────\n")
-	fmt.Printf("Requests: %d  |  Confirmed readable: %d  |  Unconfirmed: %d\n",
-		total, confirmed, total-confirmed)
+	fmt.Printf("Requests: %d  |  Confirmed readable: %d  |  Chain targets: %d\n",
+		total, confirmed, len(chainTargets))
 
 	if len(hits) > 0 {
 		fmt.Printf("\n── Confirmed hits ─────────────────────────────────────\n")
@@ -224,4 +206,87 @@ func runScan(f scanFlags) error {
 	}
 
 	return nil
+}
+
+// scanEntry fires all traversal payloads for one entry and returns the first
+// confirmed hit (if any) plus the total request count.
+func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f scanFlags, entry db.CompiledEntry) (*hitRecord, int) {
+	payloads := traversal.Generate(entry.Entry.Path, f.traversalDepth)
+	reqs := make([]engine.Request, len(payloads))
+	for i, p := range payloads {
+		reqs[i] = inject.Substitute(tmpl, f.marker, p.Value)
+	}
+
+	results := eng.Run(ctx, reqs)
+	for i, r := range results {
+		if r.Err != nil {
+			if f.verbose {
+				fmt.Fprintf(os.Stderr, "[!] %s — %v\n", r.URL, r.Err)
+			}
+			continue
+		}
+		d := detect.Check(entry, r)
+		tech := payloads[i].Technique
+		if d.Hit {
+			parser := entry.Entry.Parser
+			if parser == "" {
+				parser = "generic-secrets"
+			}
+			findings := extract.Parse(parser, r.Body, entry.Entry.Path)
+			return &hitRecord{
+				entryID:   entry.Entry.ID,
+				path:      entry.Entry.Path,
+				technique: tech,
+				status:    r.StatusCode,
+				snippets:  d.Snippets,
+				findings:  findings,
+				elapsed:   r.Elapsed,
+			}, len(results)
+		}
+		if !f.onlyHits {
+			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
+				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
+		}
+	}
+	return nil, len(results)
+}
+
+// synthEntry builds a minimal CompiledEntry for a chain follow-on target.
+// Uses a weak-confirm (any non-empty body) so any readable file is a hit.
+func synthEntry(path string) db.CompiledEntry {
+	parser := "generic-secrets"
+	if strings.Contains(path, "id_rsa") || strings.Contains(path, "id_ed25519") {
+		parser = "ssh-key"
+	} else if strings.Contains(path, "passwd") {
+		parser = "unix-passwd"
+	} else if strings.Contains(path, ".env") || strings.Contains(path, ".cfg") || strings.Contains(path, ".conf") {
+		parser = "ini-config"
+	}
+	return db.CompiledEntry{
+		Entry: db.Entry{
+			ID:        "chain:" + path,
+			Name:      path,
+			Path:      path,
+			OS:        []string{"linux"},
+			InfoGoal:  db.InfoGoalCredentials,
+			Privilege: db.PrivilegeAppUser,
+			Parser:    parser,
+			Confirm: db.Confirm{
+				Type:     db.ConfirmTypeRegex,
+				Patterns: []string{`.`},
+			},
+		},
+	}
+}
+
+func printHit(h hitRecord, showSecrets bool) {
+	fmt.Printf("[CONFIRMED] entry=%s path=%s technique=%s status=%d elapsed=%s\n",
+		h.entryID, h.path, h.technique, h.status, h.elapsed.Round(time.Millisecond))
+	for _, snip := range h.snippets {
+		fmt.Printf("    snippet: %s\n", snip)
+	}
+	for _, f := range h.findings {
+		fmt.Printf("    [finding] %s: %s = %s (confidence=%.0f%%)\n",
+			f.Type, f.Key, f.DisplayValue(showSecrets), f.Confidence*100)
+	}
 }
