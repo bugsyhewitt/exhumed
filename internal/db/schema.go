@@ -151,6 +151,15 @@ type Confirm struct {
 	Negate     []string    `yaml:"negate,omitempty"`
 }
 
+// EffectiveMinMatches returns the number of patterns that must match,
+// treating the zero value as 1.
+func (c Confirm) EffectiveMinMatches() int {
+	if c.MinMatches < 1 {
+		return 1
+	}
+	return c.MinMatches
+}
+
 // ── In-memory runtime structs ─────────────────────────────────────────────────
 
 // CompiledEntry is an Entry with its confirm regexes pre-compiled so Packet 03
