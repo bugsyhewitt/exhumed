@@ -5,7 +5,7 @@
 Modern LFI exploitation CLI and a revival of the abandoned `panoptic`.
 Point it at a vulnerable parameter and it walks a curated database of
 high-value file paths to find what's readable and extract content for
-follow-on targeting.
+follow-on targeting...
 
 ---
 
