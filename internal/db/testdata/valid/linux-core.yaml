@@ -1,0 +1,53 @@
+schema_version: 1
+group:
+  id: test-linux-core
+  name: Test Linux Core
+  description: Fixture group for unit tests.
+  os: [linux]
+  category: os
+entries:
+  - id: passwd
+    name: /etc/passwd
+    description: Local user account database; reveals usernames and home directories.
+    path: /etc/passwd
+    os: [linux, bsd, macos]
+    info_goal: credentials
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - 'root:.*:0:0:'
+      min_matches: 1
+      negate:
+        - 'No such file'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [core]
+
+  - id: shadow
+    name: /etc/shadow
+    description: Hashed passwords; requires elevated privilege to read.
+    path: /etc/shadow
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - 'root:\$[0-9]'
+      negate:
+        - 'Permission denied'
+    tags: [core]
+
+  - id: hosts
+    name: /etc/hosts
+    description: Static hostname resolution; reveals internal network layout.
+    path: /etc/hosts
+    os: [linux, bsd, macos]
+    info_goal: network-info
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - '127.0.0.1'
+    tags: [core]

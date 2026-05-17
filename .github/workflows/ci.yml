@@ -37,3 +37,6 @@ jobs:
             echo "$unformatted"
             exit 1
           fi
+
+      - name: Validate raw database corpus
+        run: CGO_ENABLED=0 go run ./cmd/exhumed db validate --db database/_raw

@@ -1,0 +1,142 @@
+schema_version: 1
+group:
+  id: raw-databases
+  name: Raw Database Configuration Files
+  description: 'Unfiltered harvest of database configuration paths (MySQL, PostgreSQL, Redis, MongoDB, SQLite).'
+  os: [linux, windows]
+  category: database
+entries:
+  - id: mysql-my-cnf
+    name: '/etc/mysql/my.cnf'
+    description: 'MySQL global configuration; may reveal credentials, socket path, and data directory.'
+    path: '/etc/mysql/my.cnf'
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - '[mysqld]'
+    alt_paths:
+      - '/etc/my.cnf'
+      - '/etc/mysql/mysql.conf.d/mysqld.cnf'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: mysql-debian-cnf
+    name: '/etc/mysql/debian.cnf'
+    description: 'MySQL Debian maintenance credentials; contains plaintext password for debian-sys-maint user.'
+    path: '/etc/mysql/debian.cnf'
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: keyword
+      patterns:
+        - 'debian-sys-maint'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: postgresql-conf
+    name: '/etc/postgresql/14/main/postgresql.conf'
+    description: 'PostgreSQL server configuration.'
+    path: '/etc/postgresql/14/main/postgresql.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'listen_addresses'
+    alt_paths:
+      - '/etc/postgresql/15/main/postgresql.conf'
+      - '/var/lib/pgsql/data/postgresql.conf'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: pg-hba-conf
+    name: '/etc/postgresql/14/main/pg_hba.conf'
+    description: 'PostgreSQL host-based authentication config; reveals auth methods and trusted networks.'
+    path: '/etc/postgresql/14/main/pg_hba.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '# TYPE'
+    alt_paths:
+      - '/var/lib/pgsql/data/pg_hba.conf'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: redis-conf
+    name: '/etc/redis/redis.conf'
+    description: 'Redis configuration; may reveal bind address, requirepass, and persistence settings.'
+    path: '/etc/redis/redis.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'requirepass'
+    alt_paths:
+      - '/etc/redis.conf'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: mongodb-conf
+    name: '/etc/mongod.conf'
+    description: 'MongoDB configuration; reveals storage path, port, and authentication settings.'
+    path: '/etc/mongod.conf'
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'storage:'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]
+
+  - id: mysql-history
+    name: '/root/.mysql_history'
+    description: 'MySQL command history for root; may contain SQL queries with embedded credentials.'
+    path: '/root/.mysql_history'
+    os: [linux]
+    info_goal: command-history
+    privilege: elevated
+    confirm:
+      type: keyword
+      patterns:
+        - 'SELECT'
+    alt_paths:
+      - '/home/www-data/.mysql_history'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/Linux/LFI-gracefulsecurity-linux.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: sqlite-db
+    name: '/var/www/html/database.sqlite'
+    description: 'SQLite database file; may contain application data, user records, and session tokens.'
+    path: '/var/www/html/database.sqlite'
+    os: [linux]
+    info_goal: database-data
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'SQLite format'
+    alt_paths:
+      - '/var/www/database.sqlite'
+      - '/var/www/html/storage/database.sqlite'
+    references:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md
+    tags: [raw, needs-confirm-review]

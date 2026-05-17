@@ -1,0 +1,19 @@
+schema_version: 1
+group:
+  id: broken-enum
+  name: Broken Enum
+  description: Fixture with an invalid info_goal value.
+  os: [linux]
+  category: os
+entries:
+  - id: test-entry
+    name: Test Entry
+    description: This entry has an invalid info_goal.
+    path: /etc/test
+    os: [linux]
+    info_goal: totally-invalid-goal
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - test

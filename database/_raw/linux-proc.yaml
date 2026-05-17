@@ -1,0 +1,3976 @@
+schema_version: 1
+group:
+  id: raw-linux-lfisuite
+  name: Raw LFISuite Linux Paths
+  description: 'Unfiltered harvest from LFISuite path-to-test list including /proc entries.'
+  os: [linux]
+  category: os
+entries:
+  - id: etc-passwd
+    name: '/etc/passwd'
+    description: 'User account or credential file.'
+    path: '/etc/passwd'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'root:'
+    parser: unix-passwd
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-shadow
+    name: '/etc/shadow'
+    description: 'Hashed passwords or shadow file.'
+    path: '/etc/shadow'
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: keyword
+      patterns:
+        - 'root:'
+    parser: unix-shadow
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-group
+    name: '/etc/group'
+    description: 'System file.'
+    path: '/etc/group'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'group'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-environ
+    name: '/proc/self/environ'
+    description: 'Environment variables; may contain secrets.'
+    path: '/proc/self/environ'
+    os: [linux]
+    info_goal: environment
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'PATH='
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-cmdline
+    name: '/proc/self/cmdline'
+    description: '/proc cmdline of web process.'
+    path: '/proc/self/cmdline'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/bin'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-stat
+    name: '/proc/self/stat'
+    description: 'Process stat information.'
+    path: '/proc/self/stat'
+    os: [linux]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - '0'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-status
+    name: '/proc/self/status'
+    description: 'Process status information.'
+    path: '/proc/self/status'
+    os: [linux]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'Name:'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-0
+    name: '/proc/self/fd/0'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/0'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-1
+    name: '/proc/self/fd/1'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/1'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-2
+    name: '/proc/self/fd/2'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/2'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-3
+    name: '/proc/self/fd/3'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/3'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-4
+    name: '/proc/self/fd/4'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/4'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-5
+    name: '/proc/self/fd/5'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/5'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-6
+    name: '/proc/self/fd/6'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/6'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-7
+    name: '/proc/self/fd/7'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/7'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-8
+    name: '/proc/self/fd/8'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/8'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-9
+    name: '/proc/self/fd/9'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/9'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-10
+    name: '/proc/self/fd/10'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/10'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-11
+    name: '/proc/self/fd/11'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/11'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-12
+    name: '/proc/self/fd/12'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/12'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-13
+    name: '/proc/self/fd/13'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/13'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-14
+    name: '/proc/self/fd/14'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/14'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-15
+    name: '/proc/self/fd/15'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/15'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-16
+    name: '/proc/self/fd/16'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/16'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-17
+    name: '/proc/self/fd/17'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/17'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-18
+    name: '/proc/self/fd/18'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/18'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-19
+    name: '/proc/self/fd/19'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/19'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-20
+    name: '/proc/self/fd/20'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/20'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-21
+    name: '/proc/self/fd/21'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/21'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-22
+    name: '/proc/self/fd/22'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/22'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-23
+    name: '/proc/self/fd/23'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/23'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-24
+    name: '/proc/self/fd/24'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/24'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-25
+    name: '/proc/self/fd/25'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/25'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-26
+    name: '/proc/self/fd/26'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/26'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-27
+    name: '/proc/self/fd/27'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/27'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-28
+    name: '/proc/self/fd/28'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/28'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-29
+    name: '/proc/self/fd/29'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/29'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-30
+    name: '/proc/self/fd/30'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/30'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-31
+    name: '/proc/self/fd/31'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/31'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-32
+    name: '/proc/self/fd/32'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/32'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-33
+    name: '/proc/self/fd/33'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/33'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-34
+    name: '/proc/self/fd/34'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/34'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-fd-35
+    name: '/proc/self/fd/35'
+    description: 'Open file descriptor; may expose log content.'
+    path: '/proc/self/fd/35'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-cpanel-cpanel-config
+    name: '/var/cpanel/cpanel.config'
+    description: 'Configuration file.'
+    path: '/var/cpanel/cpanel.config'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: proc-self-environ-00
+    name: '/proc/self/environ%00'
+    description: 'Environment variables; may contain secrets.'
+    path: '/proc/self/environ%00'
+    os: [linux]
+    info_goal: environment
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'PATH='
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-security-group
+    name: '/etc/security/group'
+    description: 'System file.'
+    path: '/etc/security/group'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'group'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-security-passwd
+    name: '/etc/security/passwd'
+    description: 'User account or credential file.'
+    path: '/etc/security/passwd'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'root:'
+    parser: unix-passwd
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-security-user
+    name: '/etc/security/user'
+    description: 'System file.'
+    path: '/etc/security/user'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'user'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-security-environ
+    name: '/etc/security/environ'
+    description: 'System file.'
+    path: '/etc/security/environ'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'environ'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-security-limits
+    name: '/etc/security/limits'
+    description: 'System file.'
+    path: '/etc/security/limits'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'limits'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-lib-security-mkuser-default
+    name: '/usr/lib/security/mkuser.default'
+    description: 'System file.'
+    path: '/usr/lib/security/mkuser.default'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'mkuser.default'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache-logs-access-log
+    name: '/apache/logs/access.log'
+    description: 'Web server or application log file.'
+    path: '/apache/logs/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache-logs-error-log
+    name: '/apache/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/apache/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-httpd-logs-acces-log
+    name: '/etc/httpd/logs/acces_log'
+    description: 'Web server or application log file.'
+    path: '/etc/httpd/logs/acces_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-httpd-logs-error-log
+    name: '/etc/httpd/logs/error_log'
+    description: 'Web server or application log file.'
+    path: '/etc/httpd/logs/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-www-logs-access-log
+    name: '/var/www/logs/access_log'
+    description: 'Web server or application log file.'
+    path: '/var/www/logs/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache-logs-access-log
+    name: '/usr/local/apache/logs/access_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/apache/logs/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-apache-access-log
+    name: '/var/log/apache/access_log'
+    description: 'Web server or application log file.'
+    path: '/var/log/apache/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-apache2-access-log
+    name: '/var/log/apache2/access_log'
+    description: 'Web server or application log file.'
+    path: '/var/log/apache2/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-access-log
+    name: '/var/log/access_log'
+    description: 'Web server or application log file.'
+    path: '/var/log/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-access-log-1
+    name: '/var/log/access.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-www-logs-error-log
+    name: '/var/www/logs/error_log'
+    description: 'Web server or application log file.'
+    path: '/var/www/logs/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-www-logs-error-log-1
+    name: '/var/www/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/var/www/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache-logs-error-log
+    name: '/usr/local/apache/logs/error_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/apache/logs/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache-logs-error-log-1
+    name: '/usr/local/apache/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/apache/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-apache-error-log
+    name: '/var/log/apache/error_log'
+    description: 'Web server or application log file.'
+    path: '/var/log/apache/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-apache2-error-log
+    name: '/var/log/apache2/error_log'
+    description: 'Web server or application log file.'
+    path: '/var/log/apache2/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-apache-error-log-1
+    name: '/var/log/apache/error.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/apache/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-apache2-error-log-1
+    name: '/var/log/apache2/error.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/apache2/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-error-log
+    name: '/var/log/error_log'
+    description: 'Web server or application log file.'
+    path: '/var/log/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-error-log-1
+    name: '/var/log/error.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-httpd-access-log
+    name: '/var/log/httpd/access_log'
+    description: 'Web server or application log file.'
+    path: '/var/log/httpd/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-httpd-error-log
+    name: '/var/log/httpd/error_log'
+    description: 'Web server or application log file.'
+    path: '/var/log/httpd/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache2-logs-error-log
+    name: '/apache2/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/apache2/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache2-logs-access-log
+    name: '/apache2/logs/access.log'
+    description: 'Web server or application log file.'
+    path: '/apache2/logs/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: logs-error-log
+    name: '/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: logs-access-log
+    name: '/logs/access.log'
+    description: 'Web server or application log file.'
+    path: '/logs/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-httpd-logs-acces-log-1
+    name: '/etc/httpd/logs/acces.log'
+    description: 'Web server or application log file.'
+    path: '/etc/httpd/logs/acces.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-httpd-logs-error-log-1
+    name: '/etc/httpd/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/etc/httpd/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache-logs-access-log-1
+    name: '/usr/local/apache/logs/access.log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/apache/logs/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache2-logs-access-log
+    name: '/usr/local/apache2/logs/access_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/apache2/logs/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache2-logs-access-log-1
+    name: '/usr/local/apache2/logs/access.log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/apache2/logs/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache2-logs-error-log
+    name: '/usr/local/apache2/logs/error_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/apache2/logs/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache2-logs-error-log-1
+    name: '/usr/local/apache2/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/apache2/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-www-logs-access-log-1
+    name: '/var/www/logs/access.log'
+    description: 'Web server or application log file.'
+    path: '/var/www/logs/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-httpd-access-log-1
+    name: '/var/log/httpd/access.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/httpd/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-httpd-error-log-1
+    name: '/var/log/httpd/error.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/httpd/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-apache-access-log-1
+    name: '/var/log/apache/access.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/apache/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-apache2-access-log-1
+    name: '/var/log/apache2/access.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/apache2/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-lampp-logs-access-log
+    name: '/opt/lampp/logs/access_log'
+    description: 'Web server or application log file.'
+    path: '/opt/lampp/logs/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-lampp-logs-error-log
+    name: '/opt/lampp/logs/error_log'
+    description: 'Web server or application log file.'
+    path: '/opt/lampp/logs/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-xampp-logs-access-log
+    name: '/opt/xampp/logs/access_log'
+    description: 'Web server or application log file.'
+    path: '/opt/xampp/logs/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-xampp-logs-error-log
+    name: '/opt/xampp/logs/error_log'
+    description: 'Web server or application log file.'
+    path: '/opt/xampp/logs/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-lampp-logs-access-log-1
+    name: '/opt/lampp/logs/access.log'
+    description: 'Web server or application log file.'
+    path: '/opt/lampp/logs/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-lampp-logs-error-log-1
+    name: '/opt/lampp/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/opt/lampp/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-xampp-logs-access-log-1
+    name: '/opt/xampp/logs/access.log'
+    description: 'Web server or application log file.'
+    path: '/opt/xampp/logs/access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-xampp-logs-error-log-1
+    name: '/opt/xampp/logs/error.log'
+    description: 'Web server or application log file.'
+    path: '/opt/xampp/logs/error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: program-files-apache-group-apache-logs-access-log
+    name: '/Program Files\Apache Group\Apache\logs\access.log'
+    description: 'Web server or application log file.'
+    path: '/Program Files\Apache Group\Apache\logs\access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: program-files-apache-group-apache-logs-error-log
+    name: '/Program Files\Apache Group\Apache\logs\error.log'
+    description: 'Web server or application log file.'
+    path: '/Program Files\Apache Group\Apache\logs\error.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: logs-access-log-1
+    name: '/logs/access_log'
+    description: 'Web server or application log file.'
+    path: '/logs/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: logs-error-log-1
+    name: '/logs/error_log'
+    description: 'Web server or application log file.'
+    path: '/logs/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache-conf-httpd-conf
+    name: '/usr/local/apache/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/apache/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache2-conf-httpd-conf
+    name: '/usr/local/apache2/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/apache2/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-httpd-conf-httpd-conf
+    name: '/etc/httpd/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/httpd/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-apache-conf-httpd-conf
+    name: '/etc/apache/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/apache/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-etc-apache-conf-httpd-conf
+    name: '/usr/local/etc/apache/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/etc/apache/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-apache2-htpasswd
+    name: '/etc/apache2/.htpasswd'
+    description: 'User account or credential file.'
+    path: '/etc/apache2/.htpasswd'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'root:'
+    parser: unix-passwd
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-apache2-httpd-conf
+    name: '/etc/apache2/httpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/apache2/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache-httpd-conf
+    name: '/usr/local/apache/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/apache/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache2-httpd-conf
+    name: '/usr/local/apache2/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/apache2/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-httpd-conf-httpd-conf
+    name: '/usr/local/httpd/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/httpd/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-etc-apache2-conf-httpd-conf
+    name: '/usr/local/etc/apache2/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/etc/apache2/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-etc-httpd-conf-httpd-conf
+    name: '/usr/local/etc/httpd/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/etc/httpd/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-apache2-conf-httpd-conf
+    name: '/usr/apache2/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/apache2/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-apache-conf-httpd-conf
+    name: '/usr/apache/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/apache/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apps-apache2-conf-httpd-conf
+    name: '/usr/local/apps/apache2/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/apps/apache2/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apps-apache-conf-httpd-conf
+    name: '/usr/local/apps/apache/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/apps/apache/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-apache2-conf-httpd-conf
+    name: '/etc/apache2/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/apache2/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-http-conf-httpd-conf
+    name: '/etc/http/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/http/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-httpd-httpd-conf
+    name: '/etc/httpd/httpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/httpd/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-http-httpd-conf
+    name: '/etc/http/httpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/http/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-httpd-conf
+    name: '/etc/httpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-apache-conf-httpd-conf
+    name: '/opt/apache/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/opt/apache/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-apache2-conf-httpd-conf
+    name: '/opt/apache2/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/opt/apache2/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-www-conf-httpd-conf
+    name: '/var/www/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/var/www/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: private-etc-httpd-httpd-conf
+    name: '/private/etc/httpd/httpd.conf'
+    description: 'Configuration file.'
+    path: '/private/etc/httpd/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: private-etc-httpd-httpd-conf-default
+    name: '/private/etc/httpd/httpd.conf.default'
+    description: 'Configuration file.'
+    path: '/private/etc/httpd/httpd.conf.default'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-webbackup-opt-apache2-conf-httpd-conf
+    name: '/Volumes/webBackup/opt/apache2/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/Volumes/webBackup/opt/apache2/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-webbackup-private-etc-httpd-httpd-conf
+    name: '/Volumes/webBackup/private/etc/httpd/httpd.conf'
+    description: 'Configuration file.'
+    path: '/Volumes/webBackup/private/etc/httpd/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-webbackup-private-etc-httpd-httpd-conf-default
+    name: '/Volumes/webBackup/private/etc/httpd/httpd.conf.default'
+    description: 'Configuration file.'
+    path: '/Volumes/webBackup/private/etc/httpd/httpd.conf.default'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: program-files-apache-group-apache-conf-httpd-conf
+    name: '/Program Files\Apache Group\Apache\conf\httpd.conf'
+    description: 'Configuration file.'
+    path: '/Program Files\Apache Group\Apache\conf\httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: program-files-apache-group-apache2-conf-httpd-conf
+    name: '/Program Files\Apache Group\Apache2\conf\httpd.conf'
+    description: 'Configuration file.'
+    path: '/Program Files\Apache Group\Apache2\conf\httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: program-files-xampp-apache-conf-httpd-conf
+    name: '/Program Files\xampp\apache\conf\httpd.conf'
+    description: 'Configuration file.'
+    path: '/Program Files\xampp\apache\conf\httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php-httpd-conf-php
+    name: '/usr/local/php/httpd.conf.php'
+    description: 'PHP application file; may contain hardcoded credentials.'
+    path: '/usr/local/php/httpd.conf.php'
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '<?php'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php4-httpd-conf-php
+    name: '/usr/local/php4/httpd.conf.php'
+    description: 'PHP application file; may contain hardcoded credentials.'
+    path: '/usr/local/php4/httpd.conf.php'
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '<?php'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php5-httpd-conf-php
+    name: '/usr/local/php5/httpd.conf.php'
+    description: 'PHP application file; may contain hardcoded credentials.'
+    path: '/usr/local/php5/httpd.conf.php'
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '<?php'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php-httpd-conf
+    name: '/usr/local/php/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/php/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php4-httpd-conf
+    name: '/usr/local/php4/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/php4/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php5-httpd-conf
+    name: '/usr/local/php5/httpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/php5/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-macintosh-hd1-opt-httpd-conf-httpd-conf
+    name: '/Volumes/Macintosh_HD1/opt/httpd/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/Volumes/Macintosh_HD1/opt/httpd/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-macintosh-hd1-opt-apache-conf-httpd-conf
+    name: '/Volumes/Macintosh_HD1/opt/apache/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/Volumes/Macintosh_HD1/opt/apache/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-macintosh-hd1-opt-apache2-conf-httpd-conf
+    name: '/Volumes/Macintosh_HD1/opt/apache2/conf/httpd.conf'
+    description: 'Configuration file.'
+    path: '/Volumes/Macintosh_HD1/opt/apache2/conf/httpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-macintosh-hd1-usr-local-php-httpd-conf-php
+    name: '/Volumes/Macintosh_HD1/usr/local/php/httpd.conf.php'
+    description: 'PHP application file; may contain hardcoded credentials.'
+    path: '/Volumes/Macintosh_HD1/usr/local/php/httpd.conf.php'
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '<?php'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-macintosh-hd1-usr-local-php4-httpd-conf-php
+    name: '/Volumes/Macintosh_HD1/usr/local/php4/httpd.conf.php'
+    description: 'PHP application file; may contain hardcoded credentials.'
+    path: '/Volumes/Macintosh_HD1/usr/local/php4/httpd.conf.php'
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '<?php'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-macintosh-hd1-usr-local-php5-httpd-conf-php
+    name: '/Volumes/Macintosh_HD1/usr/local/php5/httpd.conf.php'
+    description: 'PHP application file; may contain hardcoded credentials.'
+    path: '/Volumes/Macintosh_HD1/usr/local/php5/httpd.conf.php'
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '<?php'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-etc-apache-vhosts-conf
+    name: '/usr/local/etc/apache/vhosts.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/etc/apache/vhosts.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php-ini
+    name: '/etc/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: bin-php-ini
+    name: '/bin/php.ini'
+    description: 'Configuration file.'
+    path: '/bin/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-httpd-php-ini
+    name: '/etc/httpd/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/httpd/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-lib-php-ini
+    name: '/usr/lib/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/lib/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-lib-php-php-ini
+    name: '/usr/lib/php/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/lib/php/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-etc-php-ini
+    name: '/usr/local/etc/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/local/etc/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-lib-php-ini
+    name: '/usr/local/lib/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/local/lib/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php-lib-php-ini
+    name: '/usr/local/php/lib/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/local/php/lib/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php4-lib-php-ini
+    name: '/usr/local/php4/lib/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/local/php4/lib/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-php5-lib-php-ini
+    name: '/usr/local/php5/lib/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/local/php5/lib/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-apache-conf-php-ini
+    name: '/usr/local/apache/conf/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/local/apache/conf/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php4-4-fcgi-php-ini
+    name: '/etc/php4.4/fcgi/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php4.4/fcgi/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php4-apache-php-ini
+    name: '/etc/php4/apache/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php4/apache/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php4-apache2-php-ini
+    name: '/etc/php4/apache2/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php4/apache2/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php5-apache-php-ini
+    name: '/etc/php5/apache/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php5/apache/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php5-apache2-php-ini
+    name: '/etc/php5/apache2/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php5/apache2/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php-php-ini
+    name: '/etc/php/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php-php4-php-ini
+    name: '/etc/php/php4/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php/php4/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php-apache-php-ini
+    name: '/etc/php/apache/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php/apache/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php-apache2-php-ini
+    name: '/etc/php/apache2/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php/apache2/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: web-conf-php-ini
+    name: '/web/conf/php.ini'
+    description: 'Configuration file.'
+    path: '/web/conf/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-zend-etc-php-ini
+    name: '/usr/local/Zend/etc/php.ini'
+    description: 'Configuration file.'
+    path: '/usr/local/Zend/etc/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: opt-xampp-etc-php-ini
+    name: '/opt/xampp/etc/php.ini'
+    description: 'Configuration file.'
+    path: '/opt/xampp/etc/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-local-www-conf-php-ini
+    name: '/var/local/www/conf/php.ini'
+    description: 'Configuration file.'
+    path: '/var/local/www/conf/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php-cgi-php-ini
+    name: '/etc/php/cgi/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php/cgi/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php4-cgi-php-ini
+    name: '/etc/php4/cgi/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php4/cgi/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-php5-cgi-php-ini
+    name: '/etc/php5/cgi/php.ini'
+    description: 'Configuration file.'
+    path: '/etc/php5/cgi/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: php5-php-ini
+    name: '/php5\php.ini'
+    description: 'Configuration file.'
+    path: '/php5\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: php4-php-ini
+    name: '/php4\php.ini'
+    description: 'Configuration file.'
+    path: '/php4\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: php-php-ini
+    name: '/php\php.ini'
+    description: 'Configuration file.'
+    path: '/php\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: php-php-ini-1
+    name: '/PHP\php.ini'
+    description: 'Configuration file.'
+    path: '/PHP\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: windows-php-ini
+    name: '/WINDOWS\php.ini'
+    description: 'Configuration file.'
+    path: '/WINDOWS\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: winnt-php-ini
+    name: '/WINNT\php.ini'
+    description: 'Configuration file.'
+    path: '/WINNT\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: apache-php-php-ini
+    name: '/apache\php\php.ini'
+    description: 'Configuration file.'
+    path: '/apache\php\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: xampp-apache-bin-php-ini
+    name: '/xampp\apache\bin\php.ini'
+    description: 'Configuration file.'
+    path: '/xampp\apache\bin\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: netserver-bin-stable-apache-php-ini
+    name: '/NetServer\bin\stable\apache\php.ini'
+    description: 'Configuration file.'
+    path: '/NetServer\bin\stable\apache\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: home2-bin-stable-apache-php-ini
+    name: '/home2\bin\stable\apache\php.ini'
+    description: 'Configuration file.'
+    path: '/home2\bin\stable\apache\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: home-bin-stable-apache-php-ini
+    name: '/home\bin\stable\apache\php.ini'
+    description: 'Configuration file.'
+    path: '/home\bin\stable\apache\php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: volumes-macintosh-hd1-usr-local-php-lib-php-ini
+    name: '/Volumes/Macintosh_HD1/usr/local/php/lib/php.ini'
+    description: 'Configuration file.'
+    path: '/Volumes/Macintosh_HD1/usr/local/php/lib/php.ini'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-cpanel-logs
+    name: '/usr/local/cpanel/logs'
+    description: 'System file.'
+    path: '/usr/local/cpanel/logs'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'logs'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-cpanel-logs-stats-log
+    name: '/usr/local/cpanel/logs/stats_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/cpanel/logs/stats_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-cpanel-logs-access-log
+    name: '/usr/local/cpanel/logs/access_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/cpanel/logs/access_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-cpanel-logs-error-log
+    name: '/usr/local/cpanel/logs/error_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/cpanel/logs/error_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-cpanel-logs-license-log
+    name: '/usr/local/cpanel/logs/license_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/cpanel/logs/license_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-cpanel-logs-login-log
+    name: '/usr/local/cpanel/logs/login_log'
+    description: 'Web server or application log file.'
+    path: '/usr/local/cpanel/logs/login_log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-mysql-mysql-bin-log
+    name: '/var/log/mysql/mysql-bin.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/mysql/mysql-bin.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-mysql-log
+    name: '/var/log/mysql.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/mysql.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-mysqlderror-log
+    name: '/var/log/mysqlderror.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/mysqlderror.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-mysql-mysql-log
+    name: '/var/log/mysql/mysql.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/mysql/mysql.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-mysql-mysql-slow-log
+    name: '/var/log/mysql/mysql-slow.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/mysql/mysql-slow.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-mysql-log
+    name: '/var/mysql.log'
+    description: 'Database configuration; may contain credentials.'
+    path: '/var/mysql.log'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'host'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-lib-mysql-my-cnf
+    name: '/var/lib/mysql/my.cnf'
+    description: 'Database configuration; may contain credentials.'
+    path: '/var/lib/mysql/my.cnf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'host'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-mysql-my-cnf
+    name: '/etc/mysql/my.cnf'
+    description: 'Database configuration; may contain credentials.'
+    path: '/etc/mysql/my.cnf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'host'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-my-cnf
+    name: '/etc/my.cnf'
+    description: 'System file.'
+    path: '/etc/my.cnf'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'my.cnf'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: boot-ini
+    name: 'C:\boot.ini'
+    description: 'Configuration file.'
+    path: 'C:\boot.ini'
+    os: [windows]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: boot-ini-1
+    name: 'C:/boot.ini'
+    description: 'Configuration file.'
+    path: 'C:/boot.ini'
+    os: [windows]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: wamp-logs-access-log
+    name: 'C:\wamp\logs\access.log'
+    description: 'Web server or application log file.'
+    path: 'C:\wamp\logs\access.log'
+    os: [windows]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: wamp-logs-access-log-1
+    name: 'c:\wamp\logs\access.log'
+    description: 'Web server or application log file.'
+    path: 'c:\wamp\logs\access.log'
+    os: [windows]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: wamp-logs-access-log-2
+    name: 'c:/wamp/logs/access.log'
+    description: 'Web server or application log file.'
+    path: 'c:/wamp/logs/access.log'
+    os: [windows]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: wamp-logs-access-log-3
+    name: 'C:/wamp/logs/access.log'
+    description: 'Web server or application log file.'
+    path: 'C:/wamp/logs/access.log'
+    os: [windows]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-logrotate-d-proftpd
+    name: '/etc/logrotate.d/proftpd'
+    description: 'System file.'
+    path: '/etc/logrotate.d/proftpd'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'proftpd'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: www-logs-proftpd-system-log
+    name: '/www/logs/proftpd.system.log'
+    description: 'Web server or application log file.'
+    path: '/www/logs/proftpd.system.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-proftpd
+    name: '/var/log/proftpd'
+    description: 'Web server or application log file.'
+    path: '/var/log/proftpd'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-proftp-conf
+    name: '/etc/proftp.conf'
+    description: 'Configuration file.'
+    path: '/etc/proftp.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-protpd-proftpd-conf
+    name: '/etc/protpd/proftpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/protpd/proftpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-vhcs2-proftpd-proftpd-conf
+    name: '/etc/vhcs2/proftpd/proftpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/vhcs2/proftpd/proftpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-proftpd-modules-conf
+    name: '/etc/proftpd/modules.conf'
+    description: 'Configuration file.'
+    path: '/etc/proftpd/modules.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-vsftpd-log
+    name: '/var/log/vsftpd.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/vsftpd.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-vsftpd-chroot-list
+    name: '/etc/vsftpd.chroot_list'
+    description: 'System file.'
+    path: '/etc/vsftpd.chroot_list'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'vsftpd.chroot_list'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-logrotate-d-vsftpd-log
+    name: '/etc/logrotate.d/vsftpd.log'
+    description: 'System file.'
+    path: '/etc/logrotate.d/vsftpd.log'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'vsftpd.log'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-vsftpd-vsftpd-conf
+    name: '/etc/vsftpd/vsftpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/vsftpd/vsftpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-vsftpd-conf
+    name: '/etc/vsftpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/vsftpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-chrootusers
+    name: '/etc/chrootUsers'
+    description: 'System file.'
+    path: '/etc/chrootUsers'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'chrootUsers'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-xferlog
+    name: '/var/log/xferlog'
+    description: 'Web server or application log file.'
+    path: '/var/log/xferlog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-adm-log-xferlog
+    name: '/var/adm/log/xferlog'
+    description: 'Web server or application log file.'
+    path: '/var/adm/log/xferlog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-wu-ftpd-ftpaccess
+    name: '/etc/wu-ftpd/ftpaccess'
+    description: 'System file.'
+    path: '/etc/wu-ftpd/ftpaccess'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'ftpaccess'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-wu-ftpd-ftphosts
+    name: '/etc/wu-ftpd/ftphosts'
+    description: 'System file.'
+    path: '/etc/wu-ftpd/ftphosts'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'ftphosts'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-wu-ftpd-ftpusers
+    name: '/etc/wu-ftpd/ftpusers'
+    description: 'System file.'
+    path: '/etc/wu-ftpd/ftpusers'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'ftpusers'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-sbin-pure-config-pl
+    name: '/usr/sbin/pure-config.pl'
+    description: 'System file.'
+    path: '/usr/sbin/pure-config.pl'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'pure-config.pl'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-etc-pure-ftpd-conf
+    name: '/usr/etc/pure-ftpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/etc/pure-ftpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-pure-ftpd-pure-ftpd-conf
+    name: '/etc/pure-ftpd/pure-ftpd.conf'
+    description: 'Configuration file.'
+    path: '/etc/pure-ftpd/pure-ftpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-etc-pure-ftpd-conf
+    name: '/usr/local/etc/pure-ftpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/etc/pure-ftpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-etc-pureftpd-pdb
+    name: '/usr/local/etc/pureftpd.pdb'
+    description: 'System file.'
+    path: '/usr/local/etc/pureftpd.pdb'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'pureftpd.pdb'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-pureftpd-etc-pureftpd-pdb
+    name: '/usr/local/pureftpd/etc/pureftpd.pdb'
+    description: 'System file.'
+    path: '/usr/local/pureftpd/etc/pureftpd.pdb'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'pureftpd.pdb'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-pureftpd-sbin-pure-config-pl
+    name: '/usr/local/pureftpd/sbin/pure-config.pl'
+    description: 'System file.'
+    path: '/usr/local/pureftpd/sbin/pure-config.pl'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'pure-config.pl'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-local-pureftpd-etc-pure-ftpd-conf
+    name: '/usr/local/pureftpd/etc/pure-ftpd.conf'
+    description: 'Configuration file.'
+    path: '/usr/local/pureftpd/etc/pure-ftpd.conf'
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/'
+    parser: ini-config
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-pure-ftpd-pure-ftpd-pdb
+    name: '/etc/pure-ftpd/pure-ftpd.pdb'
+    description: 'System file.'
+    path: '/etc/pure-ftpd/pure-ftpd.pdb'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'pure-ftpd.pdb'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-pureftpd-pdb
+    name: '/etc/pureftpd.pdb'
+    description: 'System file.'
+    path: '/etc/pureftpd.pdb'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'pureftpd.pdb'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-pureftpd-passwd
+    name: '/etc/pureftpd.passwd'
+    description: 'User account or credential file.'
+    path: '/etc/pureftpd.passwd'
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'root:'
+    parser: unix-passwd
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-pure-ftpd-pureftpd-pdb
+    name: '/etc/pure-ftpd/pureftpd.pdb'
+    description: 'System file.'
+    path: '/etc/pure-ftpd/pureftpd.pdb'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'pureftpd.pdb'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-ports-ftp-pure-ftpd
+    name: '/usr/ports/ftp/pure-ftpd/'
+    description: 'System file.'
+    path: '/usr/ports/ftp/pure-ftpd/'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/etc'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-ports-net-pure-ftpd
+    name: '/usr/ports/net/pure-ftpd/'
+    description: 'System file.'
+    path: '/usr/ports/net/pure-ftpd/'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/etc'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-pkgsrc-net-pureftpd
+    name: '/usr/pkgsrc/net/pureftpd/'
+    description: 'System file.'
+    path: '/usr/pkgsrc/net/pureftpd/'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/etc'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: usr-ports-contrib-pure-ftpd
+    name: '/usr/ports/contrib/pure-ftpd/'
+    description: 'System file.'
+    path: '/usr/ports/contrib/pure-ftpd/'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - '/etc'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-pure-ftpd-pure-ftpd-log
+    name: '/var/log/pure-ftpd/pure-ftpd.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/pure-ftpd/pure-ftpd.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: logs-pure-ftpd-log
+    name: '/logs/pure-ftpd.log'
+    description: 'Web server or application log file.'
+    path: '/logs/pure-ftpd.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-pureftpd-log
+    name: '/var/log/pureftpd.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/pureftpd.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-ftp-proxy-ftp-proxy-log
+    name: '/var/log/ftp-proxy/ftp-proxy.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/ftp-proxy/ftp-proxy.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-ftp-proxy
+    name: '/var/log/ftp-proxy'
+    description: 'Web server or application log file.'
+    path: '/var/log/ftp-proxy'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-ftplog
+    name: '/var/log/ftplog'
+    description: 'Web server or application log file.'
+    path: '/var/log/ftplog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-logrotate-d-ftp
+    name: '/etc/logrotate.d/ftp'
+    description: 'System file.'
+    path: '/etc/logrotate.d/ftp'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'ftp'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-ftpchroot
+    name: '/etc/ftpchroot'
+    description: 'System file.'
+    path: '/etc/ftpchroot'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'ftpchroot'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: etc-ftphosts
+    name: '/etc/ftphosts'
+    description: 'System file.'
+    path: '/etc/ftphosts'
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'ftphosts'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-exim-mainlog
+    name: '/var/log/exim_mainlog'
+    description: 'Web server or application log file.'
+    path: '/var/log/exim_mainlog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-exim-mainlog-1
+    name: '/var/log/exim/mainlog'
+    description: 'Web server or application log file.'
+    path: '/var/log/exim/mainlog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-maillog
+    name: '/var/log/maillog'
+    description: 'Web server or application log file.'
+    path: '/var/log/maillog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-exim-paniclog
+    name: '/var/log/exim_paniclog'
+    description: 'Web server or application log file.'
+    path: '/var/log/exim_paniclog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-exim-paniclog-1
+    name: '/var/log/exim/paniclog'
+    description: 'Web server or application log file.'
+    path: '/var/log/exim/paniclog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-exim-rejectlog
+    name: '/var/log/exim/rejectlog'
+    description: 'Web server or application log file.'
+    path: '/var/log/exim/rejectlog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-exim-rejectlog-1
+    name: '/var/log/exim_rejectlog'
+    description: 'Web server or application log file.'
+    path: '/var/log/exim_rejectlog'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-httpd-access-log-2
+    name: '/var/log/httpd-access.log'
+    description: 'Web server or application log file.'
+    path: '/var/log/httpd-access.log'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
+  - id: var-log-httpd-access-log-00
+    name: '/var/log/httpd-access.log%00'
+    description: 'Web server or application log file.'
+    path: '/var/log/httpd-access.log%00'
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'GET /'
+    references:
+      - https://github.com/danielmiessler/SecLists/blob/master/Fuzzing/LFI/LFI-LFISuite-pathtotest.txt
+    tags: [raw, needs-confirm-review]
+
