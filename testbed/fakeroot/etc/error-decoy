@@ -1,0 +1,5 @@
+Warning: include(../../../../etc/passwd): failed to open stream: No such file or directory
+Warning: include(): Failed opening '../../../../etc/passwd' for inclusion
+in /var/www/html/page.php on line 12
+
+The requested file could not be loaded. Please check the path and try again.

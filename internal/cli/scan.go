@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bugsyhewitt/exhumed/internal/db"
+	"github.com/bugsyhewitt/exhumed/internal/detect"
 	"github.com/bugsyhewitt/exhumed/internal/engine"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
 	"github.com/bugsyhewitt/exhumed/internal/traversal"
@@ -30,6 +31,7 @@ type scanFlags struct {
 	traversalDepth int
 	verbose        bool
 	dbPath         string
+	onlyHits       bool
 }
 
 func newScanCmd() *cobra.Command {
@@ -48,8 +50,8 @@ The URL must contain the marker string (default FUZZ) at the injection point:
 The database is loaded from --db (default: database/).
 Use --db database/_raw to scan against the unfiltered raw corpus.
 
-Hit-confirmation using the confirm block is Packet 03 — this packet prints
-raw HTTP responses and notes "(confirmation: Packet 03)".`,
+Confirmed hits use the confirm block from each database entry.
+Use --only-hits to suppress unconfirmed responses from output.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runScan(f)
 		},
@@ -68,12 +70,23 @@ raw HTTP responses and notes "(confirmation: Packet 03)".`,
 	cmd.Flags().BoolVar(&f.insecure, "insecure", false, "Skip TLS certificate verification")
 	cmd.Flags().IntVar(&f.traversalDepth, "traversal-depth", 8, "Max directory traversal depth")
 	cmd.Flags().BoolVarP(&f.verbose, "verbose", "v", false, "Verbose output")
+	cmd.Flags().BoolVar(&f.onlyHits, "only-hits", false, "Suppress unconfirmed responses from output")
 	// --db is resolved relative to the process working directory.
 	cmd.Flags().StringVar(&f.dbPath, "db", "database", "path to database root (default: database/ in working directory)")
 
 	_ = cmd.MarkFlagRequired("url")
 
 	return cmd
+}
+
+// hitRecord stores a single confirmed LFI hit for summary output.
+type hitRecord struct {
+	entryID   string
+	path      string
+	technique string
+	status    int
+	snippets  []string
+	elapsed   time.Duration
 }
 
 func runScan(f scanFlags) error {
@@ -147,7 +160,9 @@ func runScan(f scanFlags) error {
 	})
 
 	ctx := context.Background()
+	var hits []hitRecord
 	total := 0
+	confirmed := 0
 
 	// Walk every database entry; for each, generate traversal payloads and fire.
 	for _, entry := range entries {
@@ -168,17 +183,43 @@ func runScan(f scanFlags) error {
 				}
 				continue
 			}
+
+			d := detect.Check(entry, r)
 			tech := payloads[i].Technique
-			fmt.Printf("[%d] entry=%s technique=%s status=%d bytes=%d elapsed=%s (confirmation: Packet 03)\n",
-				total, entry.Entry.ID, tech, r.StatusCode, len(r.Body), r.Elapsed.Round(time.Millisecond))
-			if f.verbose && len(r.Body) > 0 {
-				preview := string(r.Body)
-				if len(preview) > 256 {
-					preview = preview[:256] + "…"
+
+			if d.Hit {
+				confirmed++
+				rec := hitRecord{
+					entryID:   entry.Entry.ID,
+					path:      entry.Entry.Path,
+					technique: tech,
+					status:    r.StatusCode,
+					snippets:  d.Snippets,
+					elapsed:   r.Elapsed,
 				}
-				fmt.Printf("    url: %s\n    %s\n", r.URL,
-					strings.ReplaceAll(preview, "\n", "\n    "))
+				hits = append(hits, rec)
+				fmt.Printf("[CONFIRMED] entry=%s path=%s technique=%s status=%d elapsed=%s\n",
+					entry.Entry.ID, entry.Entry.Path, tech,
+					r.StatusCode, r.Elapsed.Round(time.Millisecond))
+				for _, snip := range d.Snippets {
+					fmt.Printf("    snippet: %s\n", snip)
+				}
+			} else if !f.onlyHits {
+				fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
+					entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 			}
+		}
+	}
+
+	// Summary
+	fmt.Printf("\n── Scan complete ──────────────────────────────────────\n")
+	fmt.Printf("Requests: %d  |  Confirmed readable: %d  |  Unconfirmed: %d\n",
+		total, confirmed, total-confirmed)
+
+	if len(hits) > 0 {
+		fmt.Printf("\n── Confirmed hits ─────────────────────────────────────\n")
+		for _, h := range hits {
+			fmt.Printf("  ✓ %-30s  %s  (via %s)\n", h.entryID, h.path, h.technique)
 		}
 	}
 
