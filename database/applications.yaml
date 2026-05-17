@@ -1,0 +1,141 @@
+schema_version: 1
+group:
+  id: applications
+  name: Web Application Files
+  description: Configuration and credential files for common web applications (WordPress, Drupal, Joomla, Laravel, Jenkins, etc.). High-value LFI targets.
+  os: [linux, windows]
+  category: application
+entries:
+  - id: wordpress-config
+    name: WordPress Configuration
+    description: WordPress wp-config.php contains database credentials, secret keys, and table prefix. One of the highest-value LFI targets on PHP stacks.
+    path: /var/www/html/wp-config.php
+    alt_paths:
+      - wp-config.php
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - 'DB_PASSWORD'
+
+  - id: drupal-settings
+    name: Drupal settings.php
+    description: Drupal settings.php contains database connection arrays, hash salt, and trusted host patterns.
+    path: /var/www/html/sites/default/settings.php
+    alt_paths:
+      - sites/default/settings.php
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '\$databases'
+
+  - id: joomla-config
+    name: Joomla configuration.php
+    description: Joomla configuration.php exposes database credentials and secret string via public class properties.
+    path: /var/www/html/configuration.php
+    alt_paths:
+      - configuration.php
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)public \$password'
+
+  - id: phpmyadmin-config
+    name: phpMyAdmin config.inc.php
+    description: phpMyAdmin server configuration including controluser credentials and blowfish secret.
+    path: /etc/phpmyadmin/config.inc.php
+    alt_paths:
+      - config.inc.php
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '\$cfg\['
+
+  - id: laravel-env
+    name: Laravel .env
+    description: Laravel application environment file containing APP_KEY, database credentials, mail credentials, and third-party API keys.
+    path: /var/www/html/.env
+    alt_paths:
+      - .env
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - 'APP_KEY=|DB_PASSWORD='
+
+  - id: generic-env
+    name: Generic .env
+    description: Generic dotenv file at webroot containing secrets, passwords, and API keys for arbitrary applications.
+    path: /var/www/.env
+    alt_paths:
+      - .env
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(secret|password|key)\s*='
+
+  - id: git-config
+    name: Exposed .git/config
+    description: Exposed git config inside webroot. Reveals remote URLs (often with embedded credentials) and enables source-code recovery via the .git directory.
+    path: /var/www/html/.git/config
+    alt_paths:
+      - .git/config
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '\[core\]'
+
+  - id: jenkins-masterkey
+    name: Jenkins master.key
+    description: Jenkins master encryption key used to decrypt stored credentials. Combined with hudson.util.Secret enables full credential recovery.
+    path: /var/lib/jenkins/secrets/master.key
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^[0-9a-f]{64,}'
+
+  - id: jenkins-initialpw
+    name: Jenkins initialAdminPassword
+    description: Jenkins initial admin password generated during first-run wizard. If unconsumed, grants administrative access.
+    path: /var/lib/jenkins/secrets/initialAdminPassword
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^[0-9a-f]{32}'
+
+  - id: jenkins-credentials
+    name: Jenkins credentials.xml
+    description: Jenkins credential store. Contains encrypted credential blobs; combined with master.key yields plaintext secrets.
+    path: /var/lib/jenkins/credentials.xml
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - credentials

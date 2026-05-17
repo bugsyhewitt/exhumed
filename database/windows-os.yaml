@@ -1,0 +1,82 @@
+schema_version: 1
+group:
+  id: windows-os
+  name: Windows OS Files
+  description: Core Windows operating system files that reveal system state, network configuration, credentials, or installation artifacts via LFI.
+  os: [windows]
+  category: os
+entries:
+  - id: win-ini
+    name: C:\Windows\win.ini
+    description: Legacy Windows initialization file. World-readable and present on every Windows install; the canonical Windows LFI confirmation target.
+    path: 'C:\Windows\win.ini'
+    os: [windows]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)\[fonts\]|for 16-bit app support'
+
+  - id: win-hosts
+    name: Windows hosts file
+    description: Static hostname-to-IP mappings on Windows. Reveals internal hostnames, dev/staging endpoints, and any local DNS overrides.
+    path: 'C:\Windows\System32\drivers\etc\hosts'
+    os: [windows]
+    info_goal: network-info
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'localhost'
+
+  - id: win-sam
+    name: Windows SAM hive
+    description: Security Accounts Manager hive containing local user password hashes. SYSTEM-locked while Windows runs; readable via LFI only in unusual conditions but a direct credential prize.
+    path: 'C:\Windows\System32\config\SAM'
+    os: [windows]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
+
+  - id: win-sam-repair
+    name: Windows SAM repair copy
+    description: Legacy repair backup of the SAM hive. Historically left readable; contains the same password hashes as the live SAM.
+    path: 'C:\Windows\repair\SAM'
+    os: [windows]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
+
+  - id: win-unattend
+    name: Windows Unattend.xml
+    description: Unattended-install answer file. Frequently contains administrator passwords (sometimes plaintext, sometimes base64) and domain-join credentials.
+    path: 'C:\Windows\Panther\Unattend.xml'
+    os: [windows]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)<Password>'
+
+  - id: win-netsetup
+    name: Windows NetSetup.log
+    description: Domain-join and network setup log. Reveals domain name, controller hostnames, join account, and timing of network configuration events.
+    path: 'C:\Windows\debug\NetSetup.log'
+    os: [windows]
+    info_goal: logs
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
