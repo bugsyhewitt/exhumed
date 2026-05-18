@@ -1,0 +1,98 @@
+schema_version: 1
+group:
+  id: container-cloud
+  name: Container and Cloud Credential Files
+  description: Files exposed inside containers and cloud VMs — Kubernetes service-account tokens, Docker markers, and cloud-provider credential caches.
+  os: [linux]
+  category: container
+entries:
+  - id: k8s-sa-token
+    name: Kubernetes Service Account Token
+    description: Projected service-account JWT mounted into every pod by default. Grants API access scoped to the pod's service account; high-value pivot target.
+    path: /var/run/secrets/kubernetes.io/serviceaccount/token
+    os: [linux]
+    info_goal: service-account
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^eyJ[A-Za-z0-9_-]+\.'
+    tags: [modern]
+
+  - id: k8s-sa-namespace
+    name: Kubernetes Service Account Namespace
+    description: Namespace string mounted alongside the service-account token. Confirms the host is a Kubernetes pod and identifies the namespace for scoped attacks.
+    path: /var/run/secrets/kubernetes.io/serviceaccount/namespace
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^[a-z0-9-]+$'
+    tags: [modern]
+
+  - id: k8s-sa-cacrt
+    name: Kubernetes API Server CA Certificate
+    description: PEM-encoded CA bundle used to verify the in-cluster Kubernetes API server. Useful for crafting authenticated API requests from a compromised pod.
+    path: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    os: [linux]
+    info_goal: tls-keys
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - CERTIFICATE
+    tags: [modern]
+
+  - id: docker-env
+    name: Docker container marker
+    description: Empty marker file present at filesystem root inside Docker containers. Existence confirms containerized execution.
+    path: /.dockerenv
+    os: [linux]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [modern, weak-confirm]
+
+  - id: docker-secrets
+    name: Docker secrets mount
+    description: Default mount point for Docker Swarm / compose secrets. Individual secret files are mounted as children of this directory.
+    path: /run/secrets
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [modern, weak-confirm]
+
+  - id: aws-credentials
+    name: AWS credentials file
+    description: AWS CLI shared credentials file. Contains aws_access_key_id and aws_secret_access_key per named profile — direct cloud-account compromise.
+    path: /root/.aws/credentials
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - 'aws_secret_access_key'
+    tags: [modern]
+
+  - id: gcp-adc
+    name: GCP Application Default Credentials
+    description: Google Cloud SDK application default credentials JSON. Contains refresh_token or service-account private_key enabling GCP API access.
+    path: /root/.config/gcloud/application_default_credentials.json
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)refresh_token|private_key'
+    tags: [modern]

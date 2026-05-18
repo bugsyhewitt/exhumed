@@ -1,0 +1,143 @@
+schema_version: 1
+group:
+  id: webservers
+  name: Web Server Configuration
+  description: Configuration, authentication, and virtual host files for common web servers (Apache, nginx, IIS, Tomcat). Reveals server layout, credentials, and application mount points.
+  os: [linux, windows]
+  category: webserver
+entries:
+  - id: apache-conf
+    name: Apache Main Configuration
+    description: Apache HTTP server main configuration file; reveals DocumentRoot, module config, and server layout.
+    path: /etc/apache2/apache2.conf
+    alt_paths:
+      - /etc/httpd/conf/httpd.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(ServerRoot|DocumentRoot)'
+
+  - id: apache-vhost
+    name: Apache Default VirtualHost
+    description: Apache default virtual host definition; reveals served domains, document roots, and per-host configuration.
+    path: /etc/apache2/sites-enabled/000-default.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'VirtualHost'
+
+  - id: apache-htpasswd
+    name: Apache .htpasswd
+    description: Apache basic-auth user/password database. Contains hashed credentials usable for offline cracking or direct replay.
+    path: /etc/apache2/.htpasswd
+    alt_paths:
+      - .htpasswd
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^[^:]+:\$(apr1|2y)?'
+
+  - id: apache-htaccess
+    name: Apache .htaccess
+    description: Per-directory Apache configuration overrides. Reveals rewrite rules, access restrictions, and authentication settings for the containing directory.
+    path: /var/www/html/.htaccess
+    alt_paths:
+      - .htaccess
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
+
+  - id: nginx-conf
+    name: nginx Main Configuration
+    description: nginx main configuration file; reveals worker model, included config fragments, and global HTTP block settings.
+    path: /etc/nginx/nginx.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(worker_processes|http\s*\{)'
+
+  - id: nginx-vhost
+    name: nginx Default Server Block
+    description: nginx default site configuration. Reveals server_name, listen ports, and upstream/proxy targets useful for follow-on enumeration.
+    path: /etc/nginx/sites-enabled/default
+    alt_paths:
+      - /etc/nginx/conf.d/default.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'server'
+
+  - id: iis-applicationhost
+    name: IIS applicationHost.config
+    description: IIS global server configuration. Reveals all configured sites, application pools, and bindings. Root/admin-readable; full IIS surface map.
+    path: 'C:\Windows\System32\inetsrv\config\applicationHost.config'
+    os: [windows]
+    info_goal: config
+    privilege: elevated
+    confirm:
+      type: keyword
+      patterns:
+        - 'configuration'
+
+  - id: iis-webconfig
+    name: IIS web.config
+    description: Per-application IIS configuration. Often contains connection strings, app secrets, machine keys, and authentication settings.
+    path: 'C:\inetpub\wwwroot\web.config'
+    alt_paths:
+      - 'web.config'
+    os: [windows]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'configuration'
+
+  - id: tomcat-users
+    name: Tomcat tomcat-users.xml
+    description: Apache Tomcat user/role/credential database for the Manager and Host Manager apps. Cleartext passwords enable direct admin login and WAR deployment.
+    path: /etc/tomcat9/tomcat-users.xml
+    alt_paths:
+      - conf/tomcat-users.xml
+      - /opt/tomcat/conf/tomcat-users.xml
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'tomcat-users'
+
+  - id: tomcat-serverxml
+    name: Tomcat server.xml
+    description: Tomcat core server configuration; reveals connectors, ports, JDBC realms (often with credentials), and deployed contexts.
+    path: /opt/tomcat/conf/server.xml
+    alt_paths:
+      - conf/server.xml
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'Server'

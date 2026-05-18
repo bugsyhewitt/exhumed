@@ -1,0 +1,85 @@
+schema_version: 1
+group:
+  id: databases
+  name: Database Configuration Files
+  description: Configuration files, history files, and authentication settings for common database servers (MySQL, PostgreSQL, Redis, MongoDB).
+  os: [linux]
+  category: database
+entries:
+  - id: mysql-cnf
+    name: MySQL my.cnf
+    description: MySQL/MariaDB server configuration. May include plaintext credentials in [client] or [mysqldump] sections.
+    path: /etc/mysql/my.cnf
+    alt_paths:
+      - /etc/my.cnf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)\[mysqld\]'
+
+  - id: mysql-history
+    name: MySQL root history
+    description: Root user's MySQL client command history. Often contains GRANT statements with plaintext passwords and schema-revealing queries.
+    path: /root/.mysql_history
+    os: [linux]
+    info_goal: command-history
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
+
+  - id: postgres-hba
+    name: PostgreSQL pg_hba.conf
+    description: PostgreSQL host-based authentication configuration. Reveals trust relationships, authentication methods, and client IP allowlists.
+    path: /var/lib/pgsql/data/pg_hba.conf
+    alt_paths:
+      - /etc/postgresql/14/main/pg_hba.conf
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - host
+
+  - id: postgres-conf
+    name: PostgreSQL postgresql.conf
+    description: PostgreSQL main configuration file. Reveals listen addresses, ports, logging settings, and SSL configuration.
+    path: /etc/postgresql/15/main/postgresql.conf
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
+
+  - id: redis-conf
+    name: Redis redis.conf
+    description: Redis server configuration. The bind directive reveals listen interfaces; requirepass (when present) exposes the plaintext auth password.
+    path: /etc/redis/redis.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)^(bind|requirepass)'
+
+  - id: mongodb-conf
+    name: MongoDB mongod.conf
+    description: MongoDB server configuration in YAML form. Reveals bind IP, port, storage paths, and authorization settings.
+    path: /etc/mongod.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'net:'

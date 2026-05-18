@@ -1,0 +1,209 @@
+schema_version: 1
+group:
+  id: linux-os
+  name: Linux / BSD / macOS OS Files
+  description: Core operating system files on Linux, BSD, and macOS that reveal system state, credentials, or configuration.
+  os: [linux, bsd, macos]
+  category: os
+entries:
+  - id: etc-passwd
+    name: /etc/passwd
+    description: Unix user account database. World-readable; lists every local user, their UID/GID, home directory, and login shell. The canonical LFI confirmation target.
+    path: /etc/passwd
+    os: [linux, bsd, macos]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - 'root:.*:0:0:'
+
+  - id: etc-shadow
+    name: /etc/shadow
+    description: Hashed password database. Root-readable only; reading it via LFI is a direct credential compromise enabling offline cracking.
+    path: /etc/shadow
+    os: [linux, bsd]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - 'root:[*!]?\$?[0-9a-zA-Z./$]*:'
+
+  - id: etc-group
+    name: /etc/group
+    description: Unix group database. Reveals group memberships useful for privilege mapping and lateral movement planning.
+    path: /etc/group
+    os: [linux, bsd, macos]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - 'root:x:0:'
+
+  - id: etc-hosts
+    name: /etc/hosts
+    description: Static hostname-to-IP mappings. Reveals internal hostnames, dev/staging endpoints, and network topology hints.
+    path: /etc/hosts
+    os: [linux, bsd, macos]
+    info_goal: network-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '127\.0\.0\.1'
+
+  - id: etc-hostname
+    name: /etc/hostname
+    description: System hostname. Useful for fingerprinting and correlating targets across recon data.
+    path: /etc/hostname
+    os: [linux]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
+
+  - id: etc-issue
+    name: /etc/issue
+    description: Pre-login banner shown on local terminals. Often leaks distribution name and version.
+    path: /etc/issue
+    os: [linux]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
+
+  - id: etc-os-release
+    name: /etc/os-release
+    description: Distribution identification file. Reveals exact OS name, version, and codename for targeted exploit selection.
+    path: /etc/os-release
+    alt_paths:
+      - /etc/lsb-release
+    os: [linux]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)^(NAME|DISTRIB_ID)='
+
+  - id: etc-resolv
+    name: /etc/resolv.conf
+    description: DNS resolver configuration. Reveals internal DNS servers and search domains useful for internal network mapping.
+    path: /etc/resolv.conf
+    os: [linux, bsd, macos]
+    info_goal: network-info
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'nameserver'
+
+  - id: etc-fstab
+    name: /etc/fstab
+    description: Filesystem mount table. Reveals mounted partitions, NFS shares, and storage layout — useful for finding additional read targets.
+    path: /etc/fstab
+    os: [linux, bsd]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'defaults'
+
+  - id: etc-crontab
+    name: /etc/crontab
+    description: System-wide cron schedule. Reveals scheduled tasks, script paths, and command-execution opportunities for chained exploitation.
+    path: /etc/crontab
+    os: [linux]
+    info_goal: cron
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - 'SHELL='
+
+  - id: etc-sudoers
+    name: /etc/sudoers
+    description: Sudo privilege configuration. Root-readable; reveals which users can escalate and via which commands — gold for privilege escalation planning.
+    path: /etc/sudoers
+    os: [linux, bsd, macos]
+    info_goal: config
+    privilege: elevated
+    confirm:
+      type: keyword
+      patterns:
+        - 'Defaults'
+
+  - id: etc-ssh-config
+    name: /etc/ssh/sshd_config
+    description: SSH daemon configuration. Reveals allowed auth methods, port, and security posture — useful for planning SSH-based follow-on access.
+    path: /etc/ssh/sshd_config
+    os: [linux, bsd, macos]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)^#?\s*Port\s'
+
+  - id: root-bash-history
+    name: /root/.bash_history
+    description: Root user shell command history. Often leaks credentials passed on the command line, sensitive file paths, and operational patterns.
+    path: /root/.bash_history
+    os: [linux, bsd]
+    info_goal: command-history
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]
+
+  - id: root-id-rsa
+    name: /root/.ssh/id_rsa
+    description: Root user's SSH private key. Direct credential — enables SSH access as root to any host trusting this key.
+    path: /root/.ssh/id_rsa
+    os: [linux, bsd, macos]
+    info_goal: ssh-keys
+    privilege: elevated
+    confirm:
+      type: keyword
+      patterns:
+        - 'PRIVATE KEY'
+
+  - id: var-log-auth
+    name: /var/log/auth.log
+    description: Authentication log. Reveals login attempts, sudo invocations, and SSH session activity — useful for username enumeration and attack timeline reconstruction.
+    path: /var/log/auth.log
+    alt_paths:
+      - /var/log/secure
+    os: [linux]
+    info_goal: logs
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)sshd?\['
+
+  - id: var-log-syslog
+    name: /var/log/syslog
+    description: General system log. Catch-all for service events; valuable for application fingerprinting and operational intelligence.
+    path: /var/log/syslog
+    alt_paths:
+      - /var/log/messages
+    os: [linux, bsd]
+    info_goal: logs
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [weak-confirm]

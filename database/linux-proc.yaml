@@ -1,0 +1,111 @@
+schema_version: 1
+group:
+  id: linux-proc
+  name: Linux /proc Filesystem
+  description: Linux /proc virtual filesystem entries that reveal process, kernel, and container state.
+  os: [linux]
+  category: os
+entries:
+  - id: proc-self-environ
+    name: /proc/self/environ
+    description: Environment variables of the process reading the file (typically the web server). Frequently leaks API keys, database credentials, and secrets injected at deploy time.
+    path: /proc/self/environ
+    os: [linux]
+    info_goal: environment
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'PATH='
+    tags: [modern]
+
+  - id: proc-self-cmdline
+    name: /proc/self/cmdline
+    description: Full command line of the reading process. Reveals web server binary path, config flags, and sometimes credentials passed as arguments.
+    path: /proc/self/cmdline
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '.'
+    tags: [modern, weak-confirm]
+
+  - id: proc-self-status
+    name: /proc/self/status
+    description: Human-readable process status. Reveals PID, parent PID, UID/GID, capabilities, and namespace info — useful for container detection and privilege analysis.
+    path: /proc/self/status
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)^Name:'
+    tags: [modern]
+
+  - id: proc-self-cgroup
+    name: /proc/self/cgroup
+    description: Control group memberships of the current process. Primary signal for container detection (Docker, Kubernetes, systemd slices).
+    path: /proc/self/cgroup
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '\d+:[a-z_,=-]*:/'
+    tags: [modern]
+
+  - id: proc-self-mounts
+    name: /proc/self/mounts
+    description: Filesystems mounted in the current process's mount namespace. Reveals container overlays, bind mounts, and additional readable paths.
+    path: /proc/self/mounts
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '/proc /proc'
+    tags: [modern]
+
+  - id: proc-version
+    name: /proc/version
+    description: Kernel version string. Enables targeted kernel exploit selection for local privilege escalation.
+    path: /proc/version
+    os: [linux]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: keyword
+      patterns:
+        - 'Linux version'
+    tags: [modern]
+
+  - id: proc-net-tcp
+    name: /proc/net/tcp
+    description: Active IPv4 TCP sockets. Reveals listening services, local/remote endpoints, and internal connectivity not exposed externally.
+    path: /proc/net/tcp
+    os: [linux]
+    info_goal: network-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)local_address'
+    tags: [modern]
+
+  - id: proc-1-cgroup
+    name: /proc/1/cgroup
+    description: Cgroup membership of PID 1. Distinguishes host PID-1 (init/systemd) from container PID-1, confirming container vs bare-metal context.
+    path: /proc/1/cgroup
+    os: [linux]
+    info_goal: system-info
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '\d+:'
+    tags: [modern]
