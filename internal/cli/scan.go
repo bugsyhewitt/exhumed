@@ -13,6 +13,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/engine"
 	"github.com/bugsyhewitt/exhumed/internal/extract"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
+	"github.com/bugsyhewitt/exhumed/internal/output"
 	"github.com/bugsyhewitt/exhumed/internal/traversal"
 	"github.com/spf13/cobra"
 )
@@ -37,6 +38,7 @@ type scanFlags struct {
 	showSecrets    bool
 	maxDepth       int
 	maxTargets     int
+	outputFormat   string
 }
 
 func newScanCmd() *cobra.Command {
@@ -78,6 +80,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().IntVar(&f.maxDepth, "max-depth", 3, "Max follow-on chain depth (0 = disable chaining)")
 	cmd.Flags().IntVar(&f.maxTargets, "max-targets", 500, "Hard cap on total follow-on targets")
 	cmd.Flags().StringVar(&f.dbPath, "db", "database", "Path to database root")
+	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text or json")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -96,12 +99,16 @@ type hitRecord struct {
 }
 
 func runScan(f scanFlags) error {
+	outFmt, err := output.ParseFormat(f.outputFormat)
+	if err != nil {
+		return err
+	}
+
 	if !strings.Contains(f.url, f.marker) && !strings.Contains(f.data, f.marker) {
 		return fmt.Errorf("marker %q not found in --url or --data; add it at the injection point", f.marker)
 	}
 
 	var database *db.Database
-	var err error
 	if strings.HasSuffix(strings.TrimRight(f.dbPath, "/\\"), "_raw") {
 		database, err = db.LoadDir(f.dbPath)
 	} else {
@@ -117,7 +124,7 @@ func runScan(f scanFlags) error {
 		return nil
 	}
 
-	if f.verbose {
+	if f.verbose && outFmt == output.FormatText {
 		fmt.Fprintf(os.Stderr, "[*] Loaded %d entries from %q\n", len(entries), f.dbPath)
 	}
 
@@ -144,7 +151,7 @@ func runScan(f scanFlags) error {
 	if len(surfaces) == 0 {
 		return fmt.Errorf("marker %q not found in any injection surface", f.marker)
 	}
-	if f.verbose {
+	if f.verbose && outFmt == output.FormatText {
 		fmt.Fprintf(os.Stderr, "[*] Injection surfaces: %v\n", surfaces)
 	}
 
@@ -159,6 +166,12 @@ func runScan(f scanFlags) error {
 	ctx := context.Background()
 	chainQ := chain.New(chain.Config{MaxDepth: f.maxDepth, MaxTargets: f.maxTargets})
 
+	scanStart := time.Now()
+	var jsonWriter *output.JSONWriter
+	if outFmt == output.FormatJSON {
+		jsonWriter = output.NewJSONWriter(f.url, scanStart)
+	}
+
 	var hits []hitRecord
 	total, confirmed := 0, 0
 
@@ -169,7 +182,12 @@ func runScan(f scanFlags) error {
 		if rec != nil {
 			confirmed++
 			hits = append(hits, *rec)
-			printHit(*rec, f.showSecrets)
+			if outFmt == output.FormatText {
+				printHit(*rec, f.showSecrets)
+			} else {
+				jsonWriter.AddHit(rec.entryID, rec.path, rec.technique, rec.status,
+					rec.elapsed, rec.snippets, rec.findings, f.showSecrets, 0)
+			}
 			// Feed extraction findings into chain engine.
 			chainQ.Enqueue(rec.findings)
 		}
@@ -178,7 +196,9 @@ func runScan(f scanFlags) error {
 	// Phase 2: walk follow-on chain targets.
 	chainTargets := chainQ.Targets()
 	if len(chainTargets) > 0 && f.maxDepth > 0 {
-		fmt.Printf("\n── Follow-on chain (%d targets) ──────────────────────\n", len(chainTargets))
+		if outFmt == output.FormatText {
+			fmt.Printf("\n── Follow-on chain (%d targets) ──────────────────────\n", len(chainTargets))
+		}
 		for _, tgt := range chainTargets {
 			// Synthesise a minimal entry for the chain target using the best-effort parser.
 			chainEntry := synthEntry(tgt.Path)
@@ -187,13 +207,22 @@ func runScan(f scanFlags) error {
 			if rec != nil {
 				confirmed++
 				hits = append(hits, *rec)
-				fmt.Printf("[CHAIN-HIT depth=%d via=%s]\n", tgt.Depth, tgt.FromFinding)
-				printHit(*rec, f.showSecrets)
+				if outFmt == output.FormatText {
+					fmt.Printf("[CHAIN-HIT depth=%d via=%s]\n", tgt.Depth, tgt.FromFinding)
+					printHit(*rec, f.showSecrets)
+				} else {
+					jsonWriter.AddHit(rec.entryID, rec.path, rec.technique, rec.status,
+						rec.elapsed, rec.snippets, rec.findings, f.showSecrets, tgt.Depth)
+				}
 			}
 		}
 	}
 
-	// Summary.
+	if outFmt == output.FormatJSON {
+		return jsonWriter.Finalise(os.Stdout, total, len(chainTargets))
+	}
+
+	// Text summary.
 	fmt.Printf("\n── Scan complete ──────────────────────────────────────\n")
 	fmt.Printf("Requests: %d  |  Confirmed readable: %d  |  Chain targets: %d\n",
 		total, confirmed, len(chainTargets))
