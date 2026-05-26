@@ -104,6 +104,43 @@ go run ./testbed/server
 exhumed scan --url "http://127.0.0.1:8080/?file=FUZZ" --verbose
 ```
 
+### JSON output
+
+Pass `--output json` to emit a single machine-readable JSON document instead of
+the default human-readable text. The document is written to stdout after the scan
+completes and is suitable for piping to `jq`, logging to SIEM, or feeding
+downstream automation:
+
+```bash
+# Structured JSON output
+exhumed scan --url "http://target.local/?file=FUZZ" --output json
+
+# Pipe to jq for pretty inspection
+exhumed scan --url "http://target.local/?file=FUZZ" --output json | jq '.hits[].findings'
+
+# Extract confirmed file paths
+exhumed scan --url "http://target.local/?file=FUZZ" --output json | jq -r '.hits[].path'
+
+# Only emit secrets (filter in jq)
+exhumed scan --url "http://target.local/?file=FUZZ" --output json --show-secrets \
+  | jq '.hits[].findings[] | select(.type == "secret")'
+```
+
+The JSON schema is versioned (`schema_version: "1"`). Top-level fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `schema_version` | string | Format version for downstream parsers |
+| `started_at` / `completed_at` | RFC3339 | Scan wall-clock times |
+| `target` | string | The scanned URL |
+| `total_requests` | int | HTTP requests fired |
+| `confirmed_hits` | int | Files successfully read |
+| `chain_targets_queued` | int | Follow-on paths generated |
+| `hits` | array | Each confirmed hit with findings |
+
+Each hit includes `entry_id`, `path`, `technique`, `status_code`, `elapsed_ms`,
+`snippets`, `findings`, `chain` (bool), and `chain_depth`.
+
 ### Other commands
 
 ```bash
@@ -117,13 +154,13 @@ exhumed scan --help
 
 ## Roadmap to v1.0
 
-1. **Repo scaffold, HTTP engine, injection layer, traversal generator, testbed** ← *you are here*
-2. **Versioned file database** — curated high-value paths loaded from local files
-3. **Remote feed** — `exhumed update` pulls the latest database from a versioned feed
-4. **Detection engine** — confirms successful inclusion via regex/keyword matching
-5. **Content extraction** — format-aware parsers (passwd, PHP config, env files, etc.)
-6. **Recursive follow-on chaining** — use extracted content to generate next targets
-7. **JSON-first output** — machine-readable results plus a human TTY mode
+1. **Repo scaffold, HTTP engine, injection layer, traversal generator, testbed** ✅
+2. **Versioned file database** — curated high-value paths loaded from local files ✅
+3. **Remote feed** — `exhumed update` pulls the latest database from a versioned feed ✅
+4. **Detection engine** — confirms successful inclusion via regex/keyword matching ✅
+5. **Content extraction** — format-aware parsers (passwd, PHP config, env files, etc.) ✅
+6. **Recursive follow-on chaining** — use extracted content to generate next targets ✅
+7. **JSON-first output** — machine-readable results plus a human TTY mode ✅
 8. **Single static binary release** — cross-compiled for Linux/macOS/Windows via GoReleaser
 
 ---
