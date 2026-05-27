@@ -204,6 +204,146 @@ func TestRedaction_ShowSecretsRevealsValue(t *testing.T) {
 	t.Error("no password finding to test redaction on")
 }
 
+// ── proc-environ parser ───────────────────────────────────────────────────────
+
+func nulJoin(pairs ...string) []byte {
+	var buf []byte
+	for _, p := range pairs {
+		buf = append(buf, []byte(p)...)
+		buf = append(buf, 0x00)
+	}
+	return buf
+}
+
+func TestProcEnviron_DetectsDBPassword(t *testing.T) {
+	body := nulJoin(
+		"PATH=/usr/bin:/bin",
+		"DB_PASSWORD=hunter2",
+		"USER=www-data",
+	)
+	findings := extract.Parse("proc-environ", body, "/proc/self/environ")
+	var found bool
+	for _, f := range findings {
+		if f.Type == extract.FindingTypeSecret && f.Key == "DB_PASSWORD" && f.Value == "hunter2" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected DB_PASSWORD secret finding; got: %+v", findings)
+	}
+}
+
+func TestProcEnviron_DetectsAWSSecretKey(t *testing.T) {
+	body := nulJoin(
+		"HOME=/root",
+		"AWS_SECRET_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE",
+	)
+	findings := extract.Parse("proc-environ", body, "/proc/self/environ")
+	var found bool
+	for _, f := range findings {
+		if f.Type == extract.FindingTypeSecret && f.Key == "AWS_SECRET_ACCESS_KEY" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected AWS_SECRET_ACCESS_KEY finding; got: %+v", findings)
+	}
+}
+
+func TestProcEnviron_EmitsInfoForDocumentRoot(t *testing.T) {
+	body := nulJoin(
+		"DOCUMENT_ROOT=/var/www/html",
+		"APP_ENV=production",
+	)
+	findings := extract.Parse("proc-environ", body, "/proc/self/environ")
+	var found bool
+	for _, f := range findings {
+		if f.Type == extract.FindingTypeInfo && f.Key == "DOCUMENT_ROOT" && f.Value == "/var/www/html" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected DOCUMENT_ROOT info finding; got: %+v", findings)
+	}
+}
+
+func TestProcEnviron_EmitsInfoForPWD(t *testing.T) {
+	body := nulJoin("PWD=/var/www/html")
+	findings := extract.Parse("proc-environ", body, "/proc/self/environ")
+	var found bool
+	for _, f := range findings {
+		if f.Type == extract.FindingTypeInfo && f.Key == "PWD" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected PWD info finding; got: %+v", findings)
+	}
+}
+
+func TestProcEnviron_SecretIsRedacted(t *testing.T) {
+	body := nulJoin("DB_PASSWORD=hunter2")
+	findings := extract.Parse("proc-environ", body, "/proc/self/environ")
+	for _, f := range findings {
+		if f.Type == extract.FindingTypeSecret && f.Key == "DB_PASSWORD" {
+			if !f.Redacted {
+				t.Error("expected DB_PASSWORD finding to be marked Redacted")
+			}
+			displayed := f.DisplayValue(false)
+			if displayed == "hunter2" {
+				t.Error("expected value to be redacted in display")
+			}
+			return
+		}
+	}
+	t.Error("no DB_PASSWORD finding found")
+}
+
+func TestProcEnviron_ConfidenceIs085ForSecrets(t *testing.T) {
+	body := nulJoin("API_TOKEN=abc123")
+	findings := extract.Parse("proc-environ", body, "/proc/self/environ")
+	for _, f := range findings {
+		if f.Type == extract.FindingTypeSecret && f.Key == "API_TOKEN" {
+			if f.Confidence != 0.85 {
+				t.Errorf("expected Confidence=0.85, got %v", f.Confidence)
+			}
+			return
+		}
+	}
+	t.Error("no API_TOKEN finding found")
+}
+
+func TestProcEnviron_NonSecretKeysIgnored(t *testing.T) {
+	body := nulJoin(
+		"RAILS_ENV=production",
+		"HOSTNAME=webapp-01",
+		"LANG=en_US.UTF-8",
+	)
+	findings := extract.Parse("proc-environ", body, "/proc/self/environ")
+	for _, f := range findings {
+		if f.Type == extract.FindingTypeSecret {
+			t.Errorf("unexpected secret finding for non-secret env var: %+v", f)
+		}
+	}
+}
+
+func TestProcEnviron_EmptyBodyReturnsNoFindings(t *testing.T) {
+	findings := extract.Parse("proc-environ", []byte{}, "/proc/self/environ")
+	if len(findings) != 0 {
+		t.Errorf("expected no findings for empty body, got: %+v", findings)
+	}
+}
+
+func TestProcEnviron_SourceFieldPopulated(t *testing.T) {
+	body := nulJoin("DB_PASSWORD=secret")
+	findings := extract.Parse("proc-environ", body, "/proc/self/environ")
+	for _, f := range findings {
+		if f.Source != "/proc/self/environ" {
+			t.Errorf("expected Source=/proc/self/environ, got %q", f.Source)
+		}
+	}
+}
+
 // ── Fallback / unknown parser ─────────────────────────────────────────────────
 
 func TestFallback_GenericSweep(t *testing.T) {

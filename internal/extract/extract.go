@@ -20,6 +20,7 @@ const (
 	FindingTypeSSHKey    FindingType = "ssh-key"
 	FindingTypeGitConfig FindingType = "git-config"
 	FindingTypePath      FindingType = "path"
+	FindingTypeInfo      FindingType = "info"
 )
 
 // Finding is one piece of extracted intelligence.
@@ -67,6 +68,8 @@ func Parse(hint string, body []byte, source string) []Finding {
 		return parsePasswd(body, source)
 	case "env", "ini-config":
 		return parseKeyValue(body, source)
+	case "proc-environ":
+		return parseProcEnviron(body, source)
 	case "ssh-key":
 		return parseSSHKey(body, source)
 	case "generic-secrets":
@@ -166,6 +169,65 @@ func parseSSHKey(body []byte, source string) []Finding {
 		}}
 	}
 	return nil
+}
+
+// ── proc-environ ─────────────────────────────────────────────────────────────
+
+// infoKeys are environment variable names that are useful for attack-chain
+// chaining (path discovery, host enumeration) even when they are not secrets.
+var infoKeys = map[string]bool{
+	"PWD":           true,
+	"DOCUMENT_ROOT": true,
+	"HOME":          true,
+	"PATH":          true,
+}
+
+// parseProcEnviron parses the NUL-delimited KEY=VALUE format of
+// /proc/self/environ. Each token is split on the first '=' and the key is
+// evaluated against secretKeyRE. Secret-looking keys produce FindingTypeSecret
+// findings (Confidence 0.85, Redacted). Known info keys (PWD, DOCUMENT_ROOT,
+// HOME, PATH) produce FindingTypeInfo findings (Confidence 0.9, not redacted).
+func parseProcEnviron(body []byte, source string) []Finding {
+	var findings []Finding
+	tokens := bytes.Split(body, []byte{0x00})
+	for _, tok := range tokens {
+		tok = bytes.TrimSpace(tok)
+		if len(tok) == 0 {
+			continue
+		}
+		sep := bytes.IndexByte(tok, '=')
+		if sep < 0 {
+			continue
+		}
+		key := string(tok[:sep])
+		value := string(tok[sep+1:])
+		if key == "" {
+			continue
+		}
+
+		if infoKeys[key] && value != "" {
+			findings = append(findings, Finding{
+				Type:       FindingTypeInfo,
+				Key:        key,
+				Value:      value,
+				Redacted:   false,
+				Source:     source,
+				Confidence: 0.9,
+			})
+		}
+
+		if secretKeyRE.MatchString(key) && value != "" {
+			findings = append(findings, Finding{
+				Type:       FindingTypeSecret,
+				Key:        key,
+				Value:      value,
+				Redacted:   true,
+				Source:     source,
+				Confidence: 0.85,
+			})
+		}
+	}
+	return findings
 }
 
 // ── generic-secrets ───────────────────────────────────────────────────────────
