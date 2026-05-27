@@ -54,9 +54,10 @@ and atomically installs newer database files into the local cache.
   exhumed update                   # apply update if available
   exhumed update --check           # report availability without applying
 
-The cached database is used by scan, db validate, and db stats in addition
-to the bundled database/ directory. Use --db <cachedir> to explicitly load
-from the cached location.`,
+Once installed, the cached database is preferred automatically: scan, db
+validate, and db stats load it instead of the bundled database/ directory
+whenever it records a newer version. Pass an explicit --db to override the
+resolver and load a specific directory.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUpdate(f)
 		},

@@ -79,7 +79,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().BoolVar(&f.showSecrets, "show-secrets", false, "Print secret values in full (default: partially redacted)")
 	cmd.Flags().IntVar(&f.maxDepth, "max-depth", 3, "Max follow-on chain depth (0 = disable chaining)")
 	cmd.Flags().IntVar(&f.maxTargets, "max-targets", 500, "Hard cap on total follow-on targets")
-	cmd.Flags().StringVar(&f.dbPath, "db", "database", "Path to database root")
+	cmd.Flags().StringVar(&f.dbPath, "db", defaultDBPath, "Path to database root (defaults to the freshest of the bundled DB and the feed cache)")
 	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text or json")
 
 	_ = cmd.MarkFlagRequired("url")
@@ -107,6 +107,11 @@ func runScan(f scanFlags) error {
 	if !strings.Contains(f.url, f.marker) && !strings.Contains(f.data, f.marker) {
 		return fmt.Errorf("marker %q not found in --url or --data; add it at the injection point", f.marker)
 	}
+
+	// Resolve --db: prefer the freshest available source. When --db is left at
+	// its default, an up-to-date feed cache transparently overrides the bundled
+	// database so `exhumed update` actually takes effect.
+	f.dbPath = resolvedDBPath(f.dbPath, f.verbose && outFmt == output.FormatText, os.Stderr)
 
 	var database *db.Database
 	if strings.HasSuffix(strings.TrimRight(f.dbPath, "/\\"), "_raw") {

@@ -22,6 +22,7 @@ func newDBCmd() *cobra.Command {
 
 func newDBValidateCmd() *cobra.Command {
 	var dbPath string
+	var verbose bool
 
 	cmd := &cobra.Command{
 		Use:   "validate",
@@ -38,13 +39,14 @@ Validation checks:
   - min_traversal >= 0 if present
   - schema_version supported`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			database, err := db.LoadDir(dbPath)
+			resolved := resolvedDBPath(dbPath, verbose, os.Stderr)
+			database, err := db.LoadDir(resolved)
 			if err != nil {
-				return fmt.Errorf("load database %s: %w", dbPath, err)
+				return fmt.Errorf("load database %s: %w", resolved, err)
 			}
 
 			if len(database.AllEntries()) == 0 {
-				fmt.Fprintf(os.Stderr, "info: database at %q is empty — nothing to validate\n", dbPath)
+				fmt.Fprintf(os.Stderr, "info: database at %q is empty — nothing to validate\n", resolved)
 				return nil
 			}
 
@@ -64,24 +66,27 @@ Validation checks:
 		},
 	}
 
-	cmd.Flags().StringVar(&dbPath, "db", "database", "path to database root directory")
+	cmd.Flags().StringVar(&dbPath, "db", defaultDBPath, "path to database root directory (defaults to the freshest of the bundled DB and the feed cache)")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print the resolved database source")
 	return cmd
 }
 
 func newDBStatsCmd() *cobra.Command {
 	var dbPath string
+	var verbose bool
 
 	cmd := &cobra.Command{
 		Use:   "stats",
 		Short: "Print database statistics (entry counts by group, category, OS, info_goal)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			database, err := db.LoadDir(dbPath)
+			resolved := resolvedDBPath(dbPath, verbose, os.Stderr)
+			database, err := db.LoadDir(resolved)
 			if err != nil {
-				return fmt.Errorf("load database %s: %w", dbPath, err)
+				return fmt.Errorf("load database %s: %w", resolved, err)
 			}
 
 			stats := database.Stats()
-			fmt.Printf("Database: %s\n", dbPath)
+			fmt.Printf("Database: %s\n", resolved)
 			fmt.Printf("Total entries: %d\n\n", stats.Total)
 
 			printSortedTable("By group", stats.PerGroup)
@@ -92,7 +97,8 @@ func newDBStatsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&dbPath, "db", "database", "path to database root directory")
+	cmd.Flags().StringVar(&dbPath, "db", defaultDBPath, "path to database root directory (defaults to the freshest of the bundled DB and the feed cache)")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print the resolved database source")
 	return cmd
 }
 

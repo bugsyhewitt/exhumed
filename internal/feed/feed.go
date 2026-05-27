@@ -233,6 +233,22 @@ func readVersion(cacheDir string) string {
 	return strings.TrimSpace(string(data))
 }
 
+// LocalVersion reports the installed DB version recorded in dir's version marker
+// (see VersionMarkerFile). It returns the empty string when dir contains no
+// marker — i.e. no feed-managed database has been installed there. It performs
+// no network access and never mutates state.
+func LocalVersion(dir string) string {
+	return readVersion(dir)
+}
+
+// IsNewer reports whether DB version a is newer than DB version b. Both are
+// either semver strings or date strings (YYYY-MM-DD) and are compared with the
+// same rule the feed uses to decide whether an update should be applied. An
+// empty b ("not installed") makes any non-empty a newer.
+func IsNewer(a, b string) bool {
+	return newer(a, b)
+}
+
 // newer reports whether remote is a newer version than local.
 // Both are either semver strings or date strings (YYYY-MM-DD).
 // Empty local means "not installed" → remote is always newer.
