@@ -168,10 +168,25 @@ Each hit includes `entry_id`, `path`, `technique`, `status_code`, `elapsed_ms`,
 
 ```bash
 exhumed version          # print version, commit, date
+exhumed version --db     # also print the active database version and source
 exhumed update           # update file database (Packet 05 — stub for now)
 exhumed --help
 exhumed scan --help
 ```
+
+`exhumed version --db` resolves the same database that `scan` and `db` would
+load — the freshest of the bundled database and the feed cache — and prints its
+version and source, so you can answer "am I current?" without running a scan:
+
+```
+exhumed dev (commit: none, built: unknown)
+database 2026-05-20 (cache, /home/user/.cache/exhumed)
+```
+
+Database versions are compared with proper [semantic versioning](https://semver.org/)
+(`golang.org/x/mod/semver`) when both versions are semver-shaped, so `1.10.0`
+correctly outranks `1.9.0`. Date-based versions (`YYYY-MM-DD`) fall back to
+lexicographic comparison, which is correct for fixed-width dates.
 
 ---
 

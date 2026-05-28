@@ -91,7 +91,11 @@ The recurring practitioner complaint about lightweight LFI tools is "it confirms
 
 ---
 
-## Item 6 — Proper semver feed comparison + `--db-version` surfacing (Priority: MEDIUM)
+## Item 6 — Proper semver feed comparison + `--db-version` surfacing (Priority: MEDIUM) — ✅ SHIPPED (r6)
+
+> Shipped on branch `worker-r6-exhumed`: `feed.newer` now uses `golang.org/x/mod/semver`
+> (semver compare when both versions are semver-shaped, lexicographic date fallback otherwise),
+> and `exhumed version --db` surfaces the resolved active database version and source.
 
 ### What
 The feed compares versions with lexicographic string comparison (`internal/feed`, concern #3 in the final report). `1.10.0 < 1.9.0` evaluates wrong; only date-based `YYYY-MM-DD` versions are safe today. Swap in a real semver comparator and surface the active DB version to the user so they can trust "am I current?"
