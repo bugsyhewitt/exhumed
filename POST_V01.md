@@ -173,4 +173,16 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; SecLists interop; WAF-evasion encodings. A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; SecLists interop; ~~WAF-evasion encodings~~ ✅ shipped (r11). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+
+> **WAF-evasion encodings — shipped on branch `worker-r11-exhumed`:** five new
+> WAF-bypass traversal techniques added to `internal/traversal` (`waf-double-slash`
+> mixed double-encoding, `waf-overlong-slash`, `waf-encoded-backslash`,
+> `waf-dotslash-prefix`, `waf-null-interstitial`), each ordered after the standard
+> encodings in the most-to-least-likely sequence. New `traversal.Techniques()`
+> (canonical name set in emission order) and `traversal.GenerateFiltered()`
+> (ordering-preserving allowlist filter). Exposed via a `scan --techniques` flag:
+> a comma-separated allowlist to focus or trim the technique set, `--techniques
+> list` to print available names, and a clear error on unknown names. Pure-Go
+> string construction, no new dependencies, no type-contract changes, fully
+> backward compatible (empty selection = all techniques = prior behaviour).

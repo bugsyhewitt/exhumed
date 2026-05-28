@@ -94,6 +94,39 @@ exhumed scan --url "http://target.local/?file=FUZZ" \
              --insecure
 ```
 
+### Selecting traversal techniques (WAF evasion)
+
+By default `scan` fires every traversal/encoding technique it knows, ordered
+most-to-least likely to succeed. When a target sits behind a WAF or an input
+filter, you often want to either focus on the encodings that slip past that
+specific filter or skip the noisy ones to cut request volume. `--techniques`
+takes a comma-separated allowlist:
+
+```bash
+# Only the WAF-evasion encodings (mixed double-encoding, overlong slash,
+# encoded backslash, dot-slash prefix, interstitial null)
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --techniques waf-double-slash,waf-overlong-slash,waf-encoded-backslash
+
+# A single high-signal technique for a quick check
+exhumed scan --url "http://target.local/?file=FUZZ" --techniques dotdot-slash
+
+# List every available technique name, then exit
+exhumed scan --url "http://target.local/?file=FUZZ" --techniques list
+```
+
+Available techniques fall into three groups:
+
+| Group | Techniques |
+|-------|-----------|
+| Plain / encoded | `dotdot-slash`, `dotdot-backslash`, `dotdotdotdot-doubleslash`, `url-encoded`, `url-encoded-dots`, `url-encoded-slash`, `double-url-encoded`, `overlong-utf8`, `unicode-fullwidth`, `null-byte-percent`, `null-byte-raw`, `absolute-path` |
+| WAF evasion | `waf-double-slash`, `waf-overlong-slash`, `waf-encoded-backslash`, `waf-dotslash-prefix`, `waf-null-interstitial` |
+| Wrappers | `php-filter`, `file-uri` |
+
+An unknown technique name is rejected with a clear error; an empty `--techniques`
+(the default) means "use all". The selection preserves the generator's
+most-to-least-likely ordering regardless of the order you list names in.
+
 ### Resumable scans
 
 A full scan over a large database × many traversal techniques × traversal depth
