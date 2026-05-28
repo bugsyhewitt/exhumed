@@ -75,7 +75,15 @@ Coverage *is* the product for this tool — a traversal engine that doesn't know
 
 ---
 
-## Item 5 — `php://filter` chain generator for RCE escalation (Priority: MEDIUM)
+## Item 5 — `php://filter` chain generator for RCE escalation (Priority: MEDIUM) — ✅ SHIPPED (r8)
+
+> Shipped on branch `worker-r8-exhumed`: new `internal/phpfilter` package ports the
+> verified synacktiv conversion table and chain-assembly algorithm, exposed as
+> `exhumed payload php-filter --rce '<php>'` (with `--resource` and a `--raw-base64
+> --debug` verification mode). Output is byte-for-byte identical to the reference
+> `php_filter_chain_generator`, pinned by a SHA-256 golden test. Pure-Go string
+> construction, no network I/O, MIT-clean.
+
 
 ### What
 exhumed emits exactly one PHP wrapper payload: `php://filter/convert.base64-encode/resource=<path>` (read-only source disclosure, `internal/traversal/traversal.go`). The 2023+ state of the art is the **PHP filter chain** technique (`synacktiv/php_filter_chains_oracle_exploit`, `php_filter_chain_generator`) that abuses chained `convert.iconv` filters to *generate arbitrary bytes* and turn a file-read primitive into code execution where the sink is `include()`/`require()`. Add a generator subcommand that emits these chains.

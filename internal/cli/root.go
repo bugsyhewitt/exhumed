@@ -30,4 +30,5 @@ func init() {
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newUpdateCmd())
 	rootCmd.AddCommand(newDBCmd())
+	rootCmd.AddCommand(newPayloadCmd())
 }
