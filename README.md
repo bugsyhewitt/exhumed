@@ -213,9 +213,11 @@ HTTP) to a collaborator domain you control. Observing that interaction at your
 collaborator (interactsh, Burp Collaborator, a controlled DNS/HTTP log) proves
 the sink fired even with an empty response.
 
-Like the other `payload` subcommands, this is a **generator**: it prints the
-strings and performs no network I/O — it runs no listener. You place each string
-into the vulnerable parameter and correlate hits at your collaborator yourself.
+Like the other `payload` subcommands, generation is pure: `exhumed payload oob`
+prints the strings and performs no network I/O. You place each string into the
+vulnerable parameter and correlate hits at your collaborator — either an
+external one (interactsh, Burp Collaborator) or the **built-in listener**
+described below.
 
 ```bash
 exhumed payload oob --domain abc123.oast.fun
@@ -247,9 +249,44 @@ subdomain, and a note describing each payload's precondition). `--share` and
 exhumed payload oob --domain x.burpcollaborator.net --label --json
 ```
 
-> Automated listener and hit-correlation (e.g. an interactsh-client mode) is a
-> planned follow-on; today exhumed generates the payloads and you confirm
-> out-of-band.
+#### Built-in collaborator listener
+
+`exhumed payload oob listen` runs a self-contained HTTP collaborator that records
+the callbacks produced by the `http://` and `https://` OOB payloads — closing the
+loop without an external service. When a blind sink dereferences a payload that
+points at the listener, the request is captured and printed live, proving the
+sink fired even with an empty target response. It makes no outbound calls and
+needs no cgo, so it preserves the static-binary build.
+
+```bash
+exhumed payload oob listen --addr :8080
+```
+
+```
+[*] OOB collaborator listening on http://0.0.0.0:8080/ (Ctrl-C to stop)
+[hit #1] 21:10:36  203.0.113.7      http-wrapper  GET /exhumed-oob
+[hit #2] 21:10:36  203.0.113.7      dns-resolve   GET /beacon
+```
+
+Each line shows the sequence number, time, the target's egress IP, the technique
+(attributed via the request's leading `Host` subdomain when payloads were
+generated with `--label`), the HTTP method, and the requested path. Press Ctrl-C
+to stop; with `--json` a JSON array of every recorded interaction is written to
+stdout on shutdown. Use `--addr :0` to bind an OS-assigned free port (printed on
+startup).
+
+The listener is intended for local and lab use where you control DNS for the
+collaborator domain — or where you point payloads straight at its address. For
+internet-facing blind testing, an external collaborator with a public resolver
+remains the right tool; the built-in listener handles the SMB/DNS-only techniques
+that an HTTP listener cannot observe.
+
+```bash
+# Generate http(s) payloads aimed at a domain that resolves to your listener,
+# then run the listener to confirm callbacks:
+exhumed payload oob --domain c.example.com --label
+exhumed payload oob listen --addr :8080 --json
+```
 
 ### Other commands
 

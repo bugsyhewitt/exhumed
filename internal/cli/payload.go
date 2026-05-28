@@ -3,6 +3,9 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/bugsyhewitt/exhumed/internal/oob"
 	"github.com/bugsyhewitt/exhumed/internal/phpfilter"
@@ -94,6 +97,97 @@ LEGAL NOTICE: authorized testing only.`,
 	cmd.Flags().BoolVar(&label, "label", false, "prepend a per-technique subdomain label so interactions can be attributed by technique")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit payloads as JSON (value, technique, subdomain, note)")
 	_ = cmd.MarkFlagRequired("domain")
+
+	cmd.AddCommand(newOOBListenCmd())
+	return cmd
+}
+
+// newOOBListenCmd is the correlation half of the OOB workflow: a self-contained
+// HTTP collaborator that records the callbacks produced by http(s) OOB payloads
+// (from `payload oob`) pointed at it, proving a blind-LFI sink fired even when
+// the target reflected nothing in its own response.
+//
+// It runs a pure-Go net/http listener — no external collaborator service, no
+// cgo, no outbound network I/O — for local and lab testing where the operator
+// controls DNS or points payloads straight at this listener's address.
+func newOOBListenCmd() *cobra.Command {
+	var (
+		addr   string
+		asJSON bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "listen",
+		Short: "Run a self-contained HTTP collaborator that records OOB callbacks (blind-LFI confirmation)",
+		Long: `listen runs a built-in HTTP collaborator that records the out-of-band callbacks
+produced by the http:// and https:// payloads from 'exhumed payload oob'.
+
+When a BLIND LFI sink dereferences an http(s) OOB payload that points at this
+listener, the resulting request is captured and printed live — proving the sink
+read and fetched the attacker-controlled resource even though the target's own
+HTTP response showed nothing. If the payloads were generated with --label, each
+callback is attributed to its technique via the request's leading Host subdomain.
+
+This listener is fully self-contained: it makes no outbound calls and needs no
+external collaborator (interactsh / Burp Collaborator). It is intended for local
+and lab use where you control DNS for the collaborator domain — or where you
+point payloads straight at this listener's address. For internet-facing blind
+testing, an external collaborator with a public resolver is still appropriate.
+
+Each recorded interaction prints: sequence, time, source IP, technique (if
+labelled), method, and the requested path. Press Ctrl-C to stop; with --json a
+JSON array of all interactions is written to stdout on shutdown.
+
+Examples:
+  exhumed payload oob listen --addr :8080
+  exhumed payload oob listen --addr 127.0.0.1:0 --json
+
+LEGAL NOTICE: authorized testing only.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
+			out := cmd.OutOrStdout()
+			errOut := cmd.ErrOrStderr()
+
+			ln := oob.NewListener(func(in oob.Interaction) {
+				tech := string(in.Technique)
+				if tech == "" {
+					tech = "-"
+				}
+				fmt.Fprintf(errOut, "[hit #%d] %s  %-15s  %-12s  %s %s\n",
+					in.Seq,
+					in.At.Format("15:04:05"),
+					in.RemoteIP,
+					tech,
+					in.Method,
+					in.Path,
+				)
+			})
+
+			serveErr := ln.Serve(ctx, addr, func(boundAddr string) {
+				fmt.Fprintf(errOut, "[*] OOB collaborator listening on http://%s/ (Ctrl-C to stop)\n", boundAddr)
+			})
+			if serveErr != nil {
+				return fmt.Errorf("oob listener: %w", serveErr)
+			}
+
+			interactions := ln.Interactions()
+			if asJSON {
+				enc := json.NewEncoder(out)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(interactions); err != nil {
+					return fmt.Errorf("encode json: %w", err)
+				}
+			} else {
+				fmt.Fprintf(errOut, "[*] stopped; recorded %d interaction(s)\n", len(interactions))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&addr, "addr", ":8080", "address to bind the collaborator listener (host:port; :0 picks a free port)")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "on shutdown, write all recorded interactions as a JSON array to stdout")
 	return cmd
 }
 

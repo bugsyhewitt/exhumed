@@ -119,24 +119,35 @@ Low-effort correctness fix that the project's own retro already identified and p
 
 ---
 
-## Item 7 — Out-of-band / blind-LFI confirmation hooks (Priority: MEDIUM) — ⚙️ PARTIALLY SHIPPED (r9)
+## Item 7 — Out-of-band / blind-LFI confirmation hooks (Priority: MEDIUM) — ✅ SHIPPED (r9 generator + r10 listener)
 
-> Shipped on branch `worker-r9-exhumed`: the **payload-generator half** of this
-> item, scoped exactly like Item 5's php-filter generator. New `internal/oob`
+> **Generator half — shipped on branch `worker-r9-exhumed`:** new `internal/oob`
 > package + `exhumed payload oob --domain <collaborator>` emits four OOB payload
 > classes (`smb-unc`, `http-wrapper`, `https-wrapper`, `dns-resolve`) ordered most-
 > to-least reliable, with `--label` (per-technique subdomain attribution),
 > `--share`/`--path` customisation, and `--json` output. Pure-Go string
-> construction, no network I/O, no listener, no cgo, MIT-clean — preserving the
-> static-binary constraint.
+> construction, no network I/O, no listener, no cgo, MIT-clean.
 >
-> **Deliberately NOT in this lap (the larger follow-on the roadmap warned about):**
-> the out-of-process listener / interaction-correlation half (interactsh-client
-> mode, a built-in HTTP/DNS poller, auto-tagging a `Detection` as `oob-callback`,
-> and the `--oob` flag on `scan` that fires these during a live scan). The full
-> item is ~280–300K and carries an external-backend design question; splitting off
-> the generator keeps each piece inside one budgeted lap. A future lap should take
-> the listener/correlation slice as its own scoped deliverable.
+> **Listener / correlation half — shipped on branch `worker-r10-exhumed`:** the
+> follow-on slice the roadmap warned about, resolved *without* an external-backend
+> dependency. New `oob.Listener` (in `internal/oob/listener.go`) is a
+> self-contained `net/http` collaborator exposed as `exhumed payload oob listen
+> --addr <host:port>`. It records every callback as an `Interaction` (seq, time,
+> source IP, Host, method, path, user-agent), attributes each hit to its technique
+> by matching the request's leading `Host` subdomain against the `--label`
+> labels the generator emits, streams hits live to stderr, and emits a JSON array
+> of all interactions on Ctrl-C with `--json`. Graceful signal-driven shutdown,
+> `--addr :0` for an OS-assigned port, pure-Go, no cgo, no outbound I/O —
+> preserving the static-binary constraint.
+>
+> The external-backend design question is sidestepped: the built-in listener
+> covers the `http`/`https` techniques for local and lab use (where the operator
+> controls DNS or points payloads at the listener directly); the SMB/DNS-only
+> techniques, and internet-facing blind testing that needs a public resolver, are
+> documented as the domain of an external collaborator (interactsh / Burp). The
+> `--oob` flag wiring `scan` to fire these live during a scan remains an optional
+> future enhancement, but the core capability gap — confirming a blind sink with
+> exhumed alone — is now closed.
 
 ### What
 Detection today is purely response-body pattern matching (`internal/detect`). Many real LFI sinks are *blind*: the file is read into a template/log/SSRF path but never reflected in the HTTP response. Add an OOB confirmation path so a blind read can still be proven — e.g. force the target to read an attacker-controlled UNC/`http://` path (`\\\\<collab>\\share`, `php://filter` to an external resource) and confirm via an interaction callback.
@@ -154,10 +165,12 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 
 ## Suggested lap ordering
 
-1. **Item 1** (cache auto-prefer) — unblocks the value of everything feed-related; do first.
-2. **Item 2** (`/proc/self/environ` parser) — highest signal-per-line capability win.
-3. **Item 4** (database growth) — the moat; pairs naturally after Item 1 ships the delivery path.
-4. **Item 6** (semver) — cheap correctness, compounds with 1 + 4.
-5. **Item 3** (resumable scans) — quality-of-life + stealth, self-contained.
-6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap.
-7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; scope before dispatch.
+1. **Item 1** (cache auto-prefer) — unblocks the value of everything feed-related; do first. ✅
+2. **Item 2** (`/proc/self/environ` parser) — highest signal-per-line capability win. ✅
+3. **Item 4** (database growth) — the moat; pairs naturally after Item 1 ships the delivery path. ✅
+4. **Item 6** (semver) — cheap correctness, compounds with 1 + 4. ✅
+5. **Item 3** (resumable scans) — quality-of-life + stealth, self-contained. ✅
+6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
+7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
+
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; SecLists interop; WAF-evasion encodings. A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
