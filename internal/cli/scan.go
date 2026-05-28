@@ -14,6 +14,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/extract"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
 	"github.com/bugsyhewitt/exhumed/internal/output"
+	"github.com/bugsyhewitt/exhumed/internal/pathlist"
 	"github.com/bugsyhewitt/exhumed/internal/scanstate"
 	"github.com/bugsyhewitt/exhumed/internal/traversal"
 	"github.com/spf13/cobra"
@@ -42,6 +43,7 @@ type scanFlags struct {
 	maxTargets     int
 	outputFormat   string
 	resume         string
+	pathsFile      string
 }
 
 func newScanCmd() *cobra.Command {
@@ -86,6 +88,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.dbPath, "db", defaultDBPath, "Path to database root (defaults to the freshest of the bundled DB and the feed cache)")
 	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text or json")
 	cmd.Flags().StringVar(&f.resume, "resume", "", "Persist per-entry progress to this file and skip already-attempted entries on restart")
+	cmd.Flags().StringVar(&f.pathsFile, "paths-file", "", "Scan additional file paths from a SecLists-style wordlist (one path per line; '#' comments and blanks ignored)")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -150,13 +153,29 @@ func runScan(f scanFlags) error {
 	}
 
 	entries := database.AllEntries()
-	if len(entries) == 0 {
-		fmt.Fprintf(os.Stderr, "info: database at %q is empty\n", f.dbPath)
-		return nil
-	}
 
 	if f.verbose && outFmt == output.FormatText {
 		fmt.Fprintf(os.Stderr, "[*] Loaded %d entries from %q\n", len(entries), f.dbPath)
+	}
+
+	// Append paths from an external SecLists-style wordlist, if provided. Each
+	// line becomes a synthetic weak-confirm entry scanned with the normal
+	// traversal engine. This is purely additive: the curated database always
+	// runs first, the wordlist extends its coverage.
+	if f.pathsFile != "" {
+		wordlistEntries, err := pathlist.ParseFile(f.pathsFile)
+		if err != nil {
+			return err
+		}
+		if f.verbose && outFmt == output.FormatText {
+			fmt.Fprintf(os.Stderr, "[*] Loaded %d paths from wordlist %q\n", len(wordlistEntries), f.pathsFile)
+		}
+		entries = append(entries, wordlistEntries...)
+	}
+
+	if len(entries) == 0 {
+		fmt.Fprintf(os.Stderr, "info: no entries to scan (database at %q is empty and no --paths-file provided)\n", f.dbPath)
+		return nil
 	}
 
 	// Resumable-scan state. When --resume is set, load (or create) the state
