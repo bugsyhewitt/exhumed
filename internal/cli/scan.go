@@ -33,6 +33,7 @@ type scanFlags struct {
 	proxy          string
 	insecure       bool
 	traversalDepth int
+	techniques     []string
 	verbose        bool
 	dbPath         string
 	onlyHits       bool
@@ -76,6 +77,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.proxy, "proxy", "", "HTTP proxy URL (e.g. http://127.0.0.1:8080)")
 	cmd.Flags().BoolVar(&f.insecure, "insecure", false, "Skip TLS certificate verification")
 	cmd.Flags().IntVar(&f.traversalDepth, "traversal-depth", 8, "Max directory traversal depth")
+	cmd.Flags().StringSliceVar(&f.techniques, "techniques", nil, "Comma-separated traversal techniques to use (default: all). Use 'list' to print available names.")
 	cmd.Flags().BoolVarP(&f.verbose, "verbose", "v", false, "Verbose output")
 	cmd.Flags().BoolVar(&f.onlyHits, "only-hits", false, "Suppress unconfirmed responses from output")
 	cmd.Flags().BoolVar(&f.showSecrets, "show-secrets", false, "Print secret values in full (default: partially redacted)")
@@ -109,6 +111,27 @@ func runScan(f scanFlags) error {
 
 	if !strings.Contains(f.url, f.marker) && !strings.Contains(f.data, f.marker) {
 		return fmt.Errorf("marker %q not found in --url or --data; add it at the injection point", f.marker)
+	}
+
+	// Validate --techniques against the generator's known set. Passing the single
+	// value "list" prints the available technique names and exits cleanly.
+	if len(f.techniques) == 1 && f.techniques[0] == "list" {
+		fmt.Println("Available traversal techniques (use with --techniques):")
+		for _, t := range traversal.Techniques() {
+			fmt.Printf("  %s\n", t)
+		}
+		return nil
+	}
+	if len(f.techniques) > 0 {
+		valid := make(map[string]bool, len(traversal.Techniques()))
+		for _, t := range traversal.Techniques() {
+			valid[t] = true
+		}
+		for _, t := range f.techniques {
+			if !valid[t] {
+				return fmt.Errorf("unknown technique %q; run with --techniques list to see valid names", t)
+			}
+		}
 	}
 
 	// Resolve --db: prefer the freshest available source. When --db is left at
@@ -303,7 +326,7 @@ func runScan(f scanFlags) error {
 // scanEntry fires all traversal payloads for one entry and returns the first
 // confirmed hit (if any) plus the total request count.
 func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f scanFlags, entry db.CompiledEntry) (*hitRecord, int) {
-	payloads := traversal.Generate(entry.Entry.Path, f.traversalDepth)
+	payloads := traversal.GenerateFiltered(entry.Entry.Path, f.traversalDepth, f.techniques)
 	reqs := make([]engine.Request, len(payloads))
 	for i, p := range payloads {
 		reqs[i] = inject.Substitute(tmpl, f.marker, p.Value)

