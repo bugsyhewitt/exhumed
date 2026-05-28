@@ -257,6 +257,71 @@ func TestUpdate_UnsupportedSchema_Rejected(t *testing.T) {
 	}
 }
 
+// ── IsNewer version comparison (semver + date fallback) ───────────────────────
+
+func TestIsNewer_Semver(t *testing.T) {
+	tests := []struct {
+		name       string
+		a, b       string
+		wantANewer bool
+	}{
+		// The headline regression: lexicographic compare ranked "1.10.0" < "1.9.0"
+		// because '1' < '9' at the third character. Semver must rank 1.10.0 higher.
+		{"1.10.0 beats 1.9.0", "1.10.0", "1.9.0", true},
+		{"1.9.0 does not beat 1.10.0", "1.9.0", "1.10.0", false},
+		{"2.0.0 beats 1.99.99", "2.0.0", "1.99.99", true},
+		{"patch bump", "1.2.3", "1.2.2", true},
+		{"minor bump", "1.3.0", "1.2.9", true},
+		{"equal is not newer", "1.2.3", "1.2.3", false},
+		{"prerelease lower than release", "1.0.0-rc1", "1.0.0", false},
+		{"release higher than prerelease", "1.0.0", "1.0.0-rc1", true},
+		{"empty local always newer", "1.0.0", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := feed.IsNewer(tt.a, tt.b); got != tt.wantANewer {
+				t.Errorf("IsNewer(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.wantANewer)
+			}
+		})
+	}
+}
+
+func TestIsNewer_DateFallback(t *testing.T) {
+	// YYYY-MM-DD versions are not semver-shaped, so the lexicographic fallback
+	// applies — which is correct for fixed-width date strings.
+	tests := []struct {
+		name       string
+		a, b       string
+		wantANewer bool
+	}{
+		{"newer date", "2026-05-17", "2026-05-10", true},
+		{"older date", "2026-05-10", "2026-05-17", false},
+		{"same date", "2026-05-17", "2026-05-17", false},
+		{"year rollover", "2027-01-01", "2026-12-31", true},
+		{"empty local always newer", "2026-05-17", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := feed.IsNewer(tt.a, tt.b); got != tt.wantANewer {
+				t.Errorf("IsNewer(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.wantANewer)
+			}
+		})
+	}
+}
+
+func TestIsNewer_MixedSchemesFallBackLexicographic(t *testing.T) {
+	// When only one side is semver-shaped, the comparison must not panic and
+	// falls back to lexicographic ordering deterministically.
+	if feed.IsNewer("1.0.0", "2026-05-17") == feed.IsNewer("2026-05-17", "1.0.0") {
+		// They cannot both be "newer"; if equal-and-true the result would be
+		// inconsistent. "1.0.0" < "2026-05-17" lexicographically, so the date wins.
+		t.Errorf("mixed-scheme comparison is not antisymmetric")
+	}
+	if feed.IsNewer("1.0.0", "2026-05-17") {
+		t.Errorf(`expected "2026-05-17" to outrank "1.0.0" under lexicographic fallback`)
+	}
+}
+
 // ── Check does NOT mutate state ───────────────────────────────────────────────
 
 func TestCheck_DoesNotMutateCache(t *testing.T) {
