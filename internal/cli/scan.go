@@ -14,6 +14,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/extract"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
 	"github.com/bugsyhewitt/exhumed/internal/output"
+	"github.com/bugsyhewitt/exhumed/internal/scanstate"
 	"github.com/bugsyhewitt/exhumed/internal/traversal"
 	"github.com/spf13/cobra"
 )
@@ -39,6 +40,7 @@ type scanFlags struct {
 	maxDepth       int
 	maxTargets     int
 	outputFormat   string
+	resume         string
 }
 
 func newScanCmd() *cobra.Command {
@@ -81,6 +83,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().IntVar(&f.maxTargets, "max-targets", 500, "Hard cap on total follow-on targets")
 	cmd.Flags().StringVar(&f.dbPath, "db", defaultDBPath, "Path to database root (defaults to the freshest of the bundled DB and the feed cache)")
 	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text or json")
+	cmd.Flags().StringVar(&f.resume, "resume", "", "Persist per-entry progress to this file and skip already-attempted entries on restart")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -133,6 +136,26 @@ func runScan(f scanFlags) error {
 		fmt.Fprintf(os.Stderr, "[*] Loaded %d entries from %q\n", len(entries), f.dbPath)
 	}
 
+	// Resumable-scan state. When --resume is set, load (or create) the state
+	// file bound to this target/marker/database and skip already-attempted
+	// entries. Mismatched bindings fail closed inside scanstate.Load.
+	var state *scanstate.State
+	if f.resume != "" {
+		ids := make([]string, len(entries))
+		for i, e := range entries {
+			ids[i] = e.Entry.ID
+		}
+		fp := scanstate.Fingerprint(ids)
+		state, err = scanstate.Load(f.resume, f.url, f.marker, fp)
+		if err != nil {
+			return fmt.Errorf("resume: %w", err)
+		}
+		if f.verbose && outFmt == output.FormatText && state.AttemptedCount() > 0 {
+			fmt.Fprintf(os.Stderr, "[*] Resuming: %d entries already attempted, %d prior hits will be replayed\n",
+				state.AttemptedCount(), len(state.Hits()))
+		}
+	}
+
 	tmpl := inject.NewRequest(f.method, f.url)
 	for _, h := range f.headers {
 		parts := strings.SplitN(h, ":", 2)
@@ -180,8 +203,27 @@ func runScan(f scanFlags) error {
 	var hits []hitRecord
 	total, confirmed := 0, 0
 
+	// Replay confirmed hits from prior resumed runs so the summary reflects them.
+	if state != nil {
+		for _, h := range state.Hits() {
+			confirmed++
+			if outFmt == output.FormatText {
+				fmt.Printf("[RESUMED-HIT] entry=%s path=%s technique=%s status=%d\n",
+					h.EntryID, h.Path, h.Technique, h.Status)
+			}
+		}
+	}
+
 	// Phase 1: walk every database entry.
 	for _, entry := range entries {
+		// Skip entries already attempted in a prior run.
+		if state != nil && state.Attempted(entry.Entry.ID) {
+			if f.verbose && outFmt == output.FormatText {
+				fmt.Fprintf(os.Stderr, "[*] skip (resumed) entry=%s\n", entry.Entry.ID)
+			}
+			continue
+		}
+
 		rec, requests := scanEntry(ctx, eng, tmpl, f, entry)
 		total += requests
 		if rec != nil {
@@ -195,6 +237,22 @@ func runScan(f scanFlags) error {
 			}
 			// Feed extraction findings into chain engine.
 			chainQ.Enqueue(rec.findings)
+		}
+
+		// Persist progress: mark this entry attempted and flush atomically.
+		if state != nil {
+			var sh *scanstate.Hit
+			if rec != nil {
+				sh = &scanstate.Hit{
+					EntryID:   rec.entryID,
+					Path:      rec.path,
+					Technique: rec.technique,
+					Status:    rec.status,
+				}
+			}
+			if err := state.Record(entry.Entry.ID, sh); err != nil {
+				return fmt.Errorf("resume: persist progress: %w", err)
+			}
 		}
 	}
 

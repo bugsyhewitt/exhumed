@@ -94,6 +94,29 @@ exhumed scan --url "http://target.local/?file=FUZZ" \
              --insecure
 ```
 
+### Resumable scans
+
+A full scan over a large database × many traversal techniques × traversal depth
+is thousands of requests. If you Ctrl-C, hit a rate limit, or the target flaps,
+`--resume` lets you pick up where you left off instead of re-hammering the target
+from scratch — a scan-time *and* stealth win.
+
+```bash
+# Persist per-entry progress to a state file. Run it, interrupt it (Ctrl-C),
+# then run the exact same command again — already-attempted entries are skipped
+# and prior confirmed hits are replayed in the summary.
+exhumed scan --url "http://target.local/?file=FUZZ" --resume scan.state
+
+# Same command resumes; new run only scans what wasn't attempted yet.
+exhumed scan --url "http://target.local/?file=FUZZ" --resume scan.state
+```
+
+The state file is bound to the `(target, marker, database)` triple it was created
+against. Resuming with a different target, marker, or database is **refused**
+(fail-closed) — otherwise the skip-set would silently hide entries that were never
+actually attempted against the current scan. Delete the file to start fresh. State
+is flushed atomically after every entry, so an interrupted scan never corrupts it.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
