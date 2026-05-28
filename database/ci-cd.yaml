@@ -1,0 +1,190 @@
+schema_version: 1
+group:
+  id: ci-cd
+  name: CI/CD Pipeline Configuration and Secret Files
+  description: >-
+    Continuous-integration and delivery configuration for GitHub Actions,
+    GitLab CI, Jenkins, CircleCI, Drone, Travis, and Bitbucket. These files and
+    their agent caches expose pipeline secrets, deploy keys, registry tokens,
+    and the build topology used to reach production.
+  os: [linux]
+  category: ci-cd
+entries:
+  - id: github-actions-workflow
+    name: GitHub Actions workflow
+    description: GitHub Actions workflow definition. Reveals jobs, runners, and ${{ secrets.* }} references — maps which secrets the pipeline injects and where deployments land.
+    path: /var/www/html/.github/workflows/deploy.yml
+    alt_paths:
+      - /app/.github/workflows/ci.yml
+      - /app/.github/workflows/main.yml
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'jobs:'
+        - 'runs-on:'
+    parser: none
+    references:
+      - https://docs.github.com/actions/using-workflows/about-workflows
+    tags: [r2-curated, modern, ci-cd]
+
+  - id: gitlab-ci-yml
+    name: GitLab CI .gitlab-ci.yml
+    description: GitLab CI pipeline definition. Reveals stages, deploy targets, and CI/CD variable usage; inline variables sometimes carry secrets directly.
+    path: /var/www/html/.gitlab-ci.yml
+    alt_paths:
+      - /app/.gitlab-ci.yml
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'stages:'
+        - 'script:'
+    parser: none
+    references:
+      - https://docs.gitlab.com/ee/ci/yaml/
+    tags: [r2-curated, modern, ci-cd]
+
+  - id: gitlab-runner-config
+    name: GitLab Runner config.toml
+    description: GitLab Runner configuration. Contains the runner registration token and executor settings (Docker socket, volume mounts) — registering a rogue runner intercepts pipeline secrets.
+    path: /etc/gitlab-runner/config.toml
+    os: [linux]
+    info_goal: tokens
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - 'token\s*='
+    parser: none
+    references:
+      - https://docs.gitlab.com/runner/configuration/advanced-configuration.html
+    tags: [r2-curated, modern, ci-cd]
+
+  - id: jenkins-credentials-xml
+    name: Jenkins credentials.xml
+    description: Jenkins global credential store. Holds encrypted credential blobs; combined with the Jenkins master.key and hudson.util.Secret these decrypt to plaintext.
+    path: /var/lib/jenkins/credentials.xml
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'com.cloudbees.plugins.credentials'
+    parser: none
+    references:
+      - https://www.jenkins.io/doc/book/using/using-credentials/
+    tags: [r2-curated, ci-cd]
+
+  - id: jenkins-master-key
+    name: Jenkins master.key
+    description: Jenkins master encryption key. The root secret that decrypts hudson.util.Secret blobs and therefore every credential stored in credentials.xml.
+    path: /var/lib/jenkins/secrets/master.key
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^[0-9a-f]{64,}'
+    parser: none
+    references:
+      - https://www.jenkins.io/doc/developer/security/secrets/
+    tags: [r2-curated, ci-cd]
+
+  - id: jenkins-config-xml
+    name: Jenkins config.xml
+    description: Jenkins main configuration. Reveals the security realm, authorization strategy, and (on older instances) inline user password hashes and API tokens.
+    path: /var/lib/jenkins/config.xml
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - '<hudson>'
+        - 'securityRealm'
+    parser: none
+    references:
+      - https://www.jenkins.io/doc/book/managing/system-configuration/
+    tags: [r2-curated, ci-cd]
+
+  - id: circleci-config
+    name: CircleCI config.yml
+    description: CircleCI pipeline config. Reveals orbs, contexts, and deploy jobs; environment blocks occasionally embed credentials directly.
+    path: /var/www/html/.circleci/config.yml
+    alt_paths:
+      - /app/.circleci/config.yml
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'version:'
+        - 'jobs:'
+    parser: none
+    references:
+      - https://circleci.com/docs/configuration-reference/
+    tags: [r2-curated, ci-cd]
+
+  - id: drone-yml
+    name: Drone CI .drone.yml
+    description: Drone CI pipeline definition. Reveals build steps, image registries, and from_secret references identifying which named secrets the pipeline consumes.
+    path: /var/www/html/.drone.yml
+    alt_paths:
+      - /app/.drone.yml
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'kind:'
+        - 'steps:'
+    parser: none
+    references:
+      - https://docs.drone.io/pipeline/overview/
+    tags: [r2-curated, ci-cd]
+
+  - id: travis-yml
+    name: Travis CI .travis.yml
+    description: Travis CI config. Reveals the build matrix and deploy providers; secure blocks contain encrypted secrets and the public key reference used to seal them.
+    path: /var/www/html/.travis.yml
+    alt_paths:
+      - /app/.travis.yml
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?m)^(language|script|deploy):'
+    parser: none
+    references:
+      - https://docs.travis-ci.com/user/customizing-the-build/
+    tags: [r2-curated, ci-cd]
+
+  - id: bitbucket-pipelines
+    name: Bitbucket bitbucket-pipelines.yml
+    description: Bitbucket Pipelines config. Reveals pipeline steps, deployment environments, and the repository/deployment variables the build relies on.
+    path: /var/www/html/bitbucket-pipelines.yml
+    alt_paths:
+      - /app/bitbucket-pipelines.yml
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'pipelines:'
+        - 'image:'
+    parser: none
+    references:
+      - https://support.atlassian.com/bitbucket-cloud/docs/configure-bitbucket-pipelinesyml/
+    tags: [r2-curated, ci-cd]

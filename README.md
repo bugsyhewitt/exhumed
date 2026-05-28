@@ -193,7 +193,7 @@ lexicographic comparison, which is correct for fixed-width dates.
 ## Roadmap to v1.0
 
 1. **Repo scaffold, HTTP engine, injection layer, traversal generator, testbed** ✅
-2. **Versioned file database** — curated high-value paths loaded from local files ✅
+2. **Versioned file database** — 150 curated high-value paths loaded from local files, spanning OS, web-server, framework, cloud, CI/CD, version-control, credential-store, and language-runtime targets ✅
 3. **Remote feed** — `exhumed update` pulls the latest database from a versioned feed ✅
 4. **Detection engine** — confirms successful inclusion via regex/keyword matching ✅
 5. **Content extraction** — format-aware parsers (passwd, PHP config, env files, etc.) ✅

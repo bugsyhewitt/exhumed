@@ -1,0 +1,383 @@
+schema_version: 1
+group:
+  id: frameworks
+  name: Web Framework Configuration and Secret Files
+  description: >-
+    Configuration, environment, and secret files for modern web frameworks —
+    Laravel, Symfony, Django, Rails, Spring, Next.js, Express/Node, Flask,
+    NestJS, and Phoenix. These hold database credentials, app signing keys, and
+    third-party API tokens and are the first credential targets on a confirmed
+    framework read.
+  os: [linux]
+  category: framework
+entries:
+  - id: laravel-env
+    name: Laravel .env
+    description: Laravel environment file. Contains APP_KEY (Laravel encryption/signing key), DB_PASSWORD, mail credentials, and third-party API tokens. The single highest-value file on a Laravel stack.
+    path: /var/www/html/.env
+    alt_paths:
+      - /var/www/.env
+      - /srv/www/.env
+      - /app/.env
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'APP_KEY='
+        - 'APP_ENV='
+      negate:
+        - 'No such file or directory'
+    parser: env
+    references:
+      - https://laravel.com/docs/configuration#environment-configuration
+    tags: [r2-curated, modern, framework]
+
+  - id: laravel-app-config
+    name: Laravel config/app.php
+    description: Laravel application config. Reveals the app key reference, provider list, and aliases. Useful for fingerprinting the framework version and module surface when .env is unreadable.
+    path: /var/www/html/config/app.php
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - "'providers'"
+        - "'aliases'"
+    parser: none
+    references:
+      - https://laravel.com/docs/configuration
+    tags: [r2-curated, modern, framework]
+
+  - id: laravel-database-config
+    name: Laravel config/database.php
+    description: Laravel database config. Maps connection names to host/port/database and env() references. Confirms DB topology even when .env access is blocked.
+    path: /var/www/html/config/database.php
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - "'connections'"
+        - "'mysql'"
+    parser: none
+    references:
+      - https://laravel.com/docs/database#configuration
+    tags: [r2-curated, modern, framework]
+
+  - id: symfony-env
+    name: Symfony .env
+    description: Symfony environment file. Contains APP_SECRET (CSRF/signing), DATABASE_URL (often with inline credentials), and MAILER_DSN. Direct credential disclosure on Symfony 4+.
+    path: /var/www/html/.env
+    alt_paths:
+      - /var/www/.env
+      - /app/.env
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - 'APP_SECRET='
+        - 'DATABASE_URL='
+      min_matches: 1
+      negate:
+        - 'No such file or directory'
+    parser: env
+    references:
+      - https://symfony.com/doc/current/configuration.html
+    tags: [r2-curated, modern, framework]
+
+  - id: symfony-parameters-yml
+    name: Symfony parameters.yml
+    description: Legacy Symfony 2/3 parameters file. Contains database_password, secret, and mailer credentials in plaintext YAML.
+    path: /var/www/html/app/config/parameters.yml
+    alt_paths:
+      - /var/www/html/config/parameters.yml
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - 'database_password\s*:'
+    parser: none
+    references:
+      - https://symfony.com/doc/3.4/configuration.html
+    tags: [r2-curated, framework]
+
+  - id: django-settings-py
+    name: Django settings.py
+    description: Django settings module. Contains SECRET_KEY (session/signing), DATABASES credentials, ALLOWED_HOSTS, and third-party keys. Reading it yields session-forgery and DB access.
+    path: /var/www/html/settings.py
+    alt_paths:
+      - /var/www/app/settings.py
+      - /opt/app/settings.py
+      - /app/settings.py
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'SECRET_KEY'
+        - 'DATABASES'
+    parser: generic-secrets
+    references:
+      - https://docs.djangoproject.com/en/stable/topics/settings/
+    tags: [r2-curated, modern, framework]
+
+  - id: django-local-settings
+    name: Django local_settings.py
+    description: Conventional Django local override module holding environment-specific secrets — production DB passwords and API keys kept out of the committed settings.py.
+    path: /var/www/html/local_settings.py
+    alt_paths:
+      - /opt/app/local_settings.py
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - "(?i)(SECRET_KEY|PASSWORD)\\s*="
+    parser: generic-secrets
+    references:
+      - https://docs.djangoproject.com/en/stable/topics/settings/
+    tags: [r2-curated, framework]
+
+  - id: rails-database-yml
+    name: Rails config/database.yml
+    description: Ruby on Rails database config. Contains adapter, host, username, and password for development, test, and production environments.
+    path: /var/www/html/config/database.yml
+    alt_paths:
+      - /app/config/database.yml
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'adapter:'
+        - 'production:'
+    parser: none
+    references:
+      - https://guides.rubyonrails.org/configuring.html#configuring-a-database
+    tags: [r2-curated, modern, framework]
+
+  - id: rails-secrets-yml
+    name: Rails config/secrets.yml
+    description: Rails secrets file (Rails 4.1–5.1). Contains secret_key_base used to sign and encrypt session cookies — enables session forgery.
+    path: /var/www/html/config/secrets.yml
+    alt_paths:
+      - /app/config/secrets.yml
+    os: [linux]
+    info_goal: tokens
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - 'secret_key_base\s*:'
+    parser: none
+    references:
+      - https://guides.rubyonrails.org/4_1_release_notes.html#config-secrets-yml
+    tags: [r2-curated, framework]
+
+  - id: rails-credentials-key
+    name: Rails master.key
+    description: Rails 5.2+ master key that decrypts config/credentials.yml.enc. Reading it lets an attacker decrypt the encrypted credentials store offline.
+    path: /var/www/html/config/master.key
+    alt_paths:
+      - /app/config/master.key
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^[0-9a-f]{32}'
+    parser: none
+    references:
+      - https://guides.rubyonrails.org/security.html#custom-credentials
+    tags: [r2-curated, modern, framework]
+
+  - id: spring-application-properties
+    name: Spring application.properties
+    description: Spring Boot properties config. Contains spring.datasource.password, server keystore passwords, and management endpoint secrets in key=value form.
+    path: /app/application.properties
+    alt_paths:
+      - /opt/app/config/application.properties
+      - /var/www/application.properties
+      - /BOOT-INF/classes/application.properties
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - 'spring\.datasource\.(password|url)='
+    parser: env
+    references:
+      - https://docs.spring.io/spring-boot/docs/current/reference/html/application-properties.html
+    tags: [r2-curated, modern, framework]
+
+  - id: spring-application-yml
+    name: Spring application.yml
+    description: Spring Boot YAML config. Contains datasource credentials, security users, and cloud config under the spring/server keys. The YAML counterpart to application.properties.
+    path: /app/application.yml
+    alt_paths:
+      - /opt/app/config/application.yml
+      - /BOOT-INF/classes/application.yml
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'spring:'
+        - 'datasource:'
+    parser: none
+    references:
+      - https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.external-config.yaml
+    tags: [r2-curated, modern, framework]
+
+  - id: nextjs-env-local
+    name: Next.js .env.local
+    description: Next.js local environment file. Holds server-only secrets (DATABASE_URL, NEXTAUTH_SECRET, API keys) that are never sent to the browser — high-value on a confirmed read.
+    path: /var/www/html/.env.local
+    alt_paths:
+      - /app/.env.local
+      - /app/.env.production.local
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(NEXTAUTH_SECRET|DATABASE_URL|API_KEY)='
+      negate:
+        - 'No such file or directory'
+    parser: env
+    references:
+      - https://nextjs.org/docs/basic-features/environment-variables
+    tags: [r2-curated, modern, framework]
+
+  - id: node-dotenv
+    name: Node.js .env
+    description: Generic Node/Express dotenv file loaded by the dotenv package. Contains DB connection strings, JWT_SECRET, session secrets, and third-party API keys.
+    path: /app/.env
+    alt_paths:
+      - /usr/src/app/.env
+      - /var/www/html/.env
+      - /home/node/app/.env
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(JWT_SECRET|SESSION_SECRET|MONGO_URI|DATABASE_URL)='
+      negate:
+        - 'No such file or directory'
+    parser: env
+    references:
+      - https://github.com/motdotla/dotenv
+    tags: [r2-curated, modern, framework]
+
+  - id: nestjs-env
+    name: NestJS .env
+    description: NestJS application environment file consumed by @nestjs/config. Holds database credentials, JWT signing secrets, and provider API keys.
+    path: /usr/src/app/.env
+    alt_paths:
+      - /app/.env
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(JWT_SECRET|DB_PASSWORD|DATABASE_URL)='
+      negate:
+        - 'No such file or directory'
+    parser: env
+    references:
+      - https://docs.nestjs.com/techniques/configuration
+    tags: [r2-curated, modern, framework]
+
+  - id: flask-config-py
+    name: Flask config.py
+    description: Flask configuration module. Contains SECRET_KEY (session signing), SQLALCHEMY_DATABASE_URI (often with inline credentials), and mail settings.
+    path: /var/www/html/config.py
+    alt_paths:
+      - /app/config.py
+      - /opt/app/config.py
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - "(?i)(SECRET_KEY|SQLALCHEMY_DATABASE_URI)\\s*="
+    parser: generic-secrets
+    references:
+      - https://flask.palletsprojects.com/en/stable/config/
+    tags: [r2-curated, modern, framework]
+
+  - id: phoenix-prod-secret
+    name: Phoenix prod.secret.exs
+    description: Elixir/Phoenix production secrets module. Contains the secret_key_base for session signing and the Ecto database Repo credentials.
+    path: /app/config/prod.secret.exs
+    alt_paths:
+      - /opt/app/config/prod.secret.exs
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - 'secret_key_base:'
+    parser: none
+    references:
+      - https://hexdocs.pm/phoenix/deployment.html
+    tags: [r2-curated, framework]
+
+  - id: dotnet-appsettings
+    name: ASP.NET Core appsettings.json
+    description: ASP.NET Core configuration. Contains ConnectionStrings (DB credentials), JWT signing keys, and third-party secrets in JSON. Often shipped alongside the binary.
+    path: /app/appsettings.json
+    alt_paths:
+      - /app/appsettings.Production.json
+      - /var/www/appsettings.json
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'ConnectionStrings'
+      negate:
+        - 'No such file or directory'
+    parser: generic-secrets
+    references:
+      - https://learn.microsoft.com/aspnet/core/fundamentals/configuration/
+    tags: [r2-curated, modern, framework]
+
+  - id: adminer-php
+    name: Adminer single-file DB admin
+    description: Adminer database management script left in webroot. If reachable it grants a login form to any database the web user can reach; source reveals the version and connection defaults.
+    path: /var/www/html/adminer.php
+    alt_paths:
+      - /var/www/html/adminer/index.php
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'Adminer'
+    parser: none
+    references:
+      - https://www.adminer.org/
+    tags: [r2-curated, framework]

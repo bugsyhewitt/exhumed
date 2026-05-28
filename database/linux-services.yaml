@@ -1,0 +1,309 @@
+schema_version: 1
+group:
+  id: linux-services
+  name: Linux Service Configuration and Credential Files
+  description: >-
+    Configuration and credential files for common Linux daemons — sshd, sudo,
+    cron, mail (Postfix/Dovecot), VPN (OpenVPN/WireGuard), Samba, FTP, and
+    monitoring agents. These reveal auth policy, service secrets, and network
+    layout that drive privilege escalation and lateral movement.
+  os: [linux]
+  category: misc
+entries:
+  - id: sshd-config
+    name: OpenSSH sshd_config
+    description: SSH server config. Reveals PermitRootLogin, PasswordAuthentication, AllowUsers, and key/port settings — defines the remote-access attack surface.
+    path: /etc/ssh/sshd_config
+    os: [linux, bsd]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(PermitRootLogin|PasswordAuthentication|Port)\s'
+    parser: none
+    references:
+      - https://man.openbsd.org/sshd_config
+    tags: [r2-curated, linux]
+
+  - id: sudoers
+    name: /etc/sudoers
+    description: sudo policy file. Reveals which users may run which commands as root — NOPASSWD entries and overbroad rules are direct privilege-escalation paths.
+    path: /etc/sudoers
+    os: [linux, bsd, macos]
+    info_goal: config
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(Defaults|root\s+ALL|%[a-z]+\s+ALL)'
+    parser: none
+    references:
+      - https://man7.org/linux/man-pages/man5/sudoers.5.html
+    tags: [r2-curated, linux]
+
+  - id: crontab-system
+    name: System crontab
+    description: System-wide cron table. Reveals scheduled commands and their run-as users; writable script targets referenced here are classic privilege-escalation vectors.
+    path: /etc/crontab
+    os: [linux, bsd]
+    info_goal: cron
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?m)^\s*([0-9*]+\s+){4}[0-9*]+\s+\S+'
+    parser: none
+    references:
+      - https://man7.org/linux/man-pages/man5/crontab.5.html
+    tags: [r2-curated, linux]
+
+  - id: cron-d-entry
+    name: /etc/cron.d job
+    description: Drop-in cron job directory file. Each file defines scheduled commands with an explicit user field — a frequent home for backup and deploy scripts carrying secrets.
+    path: /etc/cron.d/app
+    os: [linux]
+    info_goal: cron
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?m)^\s*([0-9*/,-]+\s+){5}\S+'
+    parser: none
+    references:
+      - https://man7.org/linux/man-pages/man5/crontab.5.html
+    tags: [r2-curated, linux]
+
+  - id: postfix-main-cf
+    name: Postfix main.cf
+    description: Postfix mail server config. Reveals relay hosts, SASL auth maps, and the mydomain/myhostname identity — points to the sasl_passwd file holding SMTP credentials.
+    path: /etc/postfix/main.cf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(myhostname|relayhost|smtp_sasl_password_maps)\s*='
+    parser: none
+    references:
+      - http://www.postfix.org/postconf.5.html
+    tags: [r2-curated, linux]
+
+  - id: postfix-sasl-passwd
+    name: Postfix sasl_passwd
+    description: Postfix SASL password map. Stores plaintext relay SMTP credentials in host=user:password form — direct outbound-mail account compromise.
+    path: /etc/postfix/sasl_passwd
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '\S+\s+\S+:\S+'
+    parser: generic-secrets
+    references:
+      - http://www.postfix.org/SASL_README.html
+    tags: [r2-curated, linux]
+
+  - id: dovecot-conf
+    name: Dovecot dovecot.conf
+    description: Dovecot IMAP/POP3 server config. Reveals auth mechanisms, userdb/passdb backends, and SSL key paths used by the mail store.
+    path: /etc/dovecot/dovecot.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(protocols|auth_mechanisms|passdb)'
+    parser: none
+    references:
+      - https://doc.dovecot.org/configuration_manual/
+    tags: [r2-curated, linux]
+
+  - id: openvpn-conf
+    name: OpenVPN server config
+    description: OpenVPN config. Reveals the tunnel topology, certificate/key paths, and any inline secrets or auth-user-pass file referenced for client authentication.
+    path: /etc/openvpn/server.conf
+    alt_paths:
+      - /etc/openvpn/server/server.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(proto|dev|server|ca|cert|key)\s'
+    parser: none
+    references:
+      - https://openvpn.net/community-resources/reference-manual-for-openvpn/
+    tags: [r2-curated, linux]
+
+  - id: wireguard-conf
+    name: WireGuard wg0.conf
+    description: WireGuard interface config. Contains the interface PrivateKey and peer PublicKeys/endpoints in plaintext — recovering the private key lets an attacker impersonate the tunnel endpoint.
+    path: /etc/wireguard/wg0.conf
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(\[Interface\]|PrivateKey\s*=)'
+    parser: generic-secrets
+    references:
+      - https://www.wireguard.com/quickstart/
+    tags: [r2-curated, modern, linux]
+
+  - id: samba-smb-conf
+    name: Samba smb.conf
+    description: Samba server config. Reveals share definitions, paths, and valid-user lists; the security mode and guest settings expose unauthenticated-access misconfigurations.
+    path: /etc/samba/smb.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*\[(global|homes|printers)\]'
+    parser: ini-config
+    references:
+      - https://www.samba.org/samba/docs/current/man-html/smb.conf.5.html
+    tags: [r2-curated, linux]
+
+  - id: vsftpd-conf
+    name: vsftpd.conf
+    description: vsftpd FTP server config. Reveals anonymous-access settings, chroot policy, and the local_root/user_config_dir — maps which directories FTP users can reach.
+    path: /etc/vsftpd.conf
+    alt_paths:
+      - /etc/vsftpd/vsftpd.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(anonymous_enable|local_enable|chroot_local_user)\s*='
+    parser: ini-config
+    references:
+      - https://security.appspot.com/vsftpd.html
+    tags: [r2-curated, linux]
+
+  - id: proftpd-conf
+    name: ProFTPD proftpd.conf
+    description: ProFTPD config. Reveals the server identity, authentication modules, and DefaultRoot jail — AuthUserFile references point to credential stores.
+    path: /etc/proftpd/proftpd.conf
+    alt_paths:
+      - /etc/proftpd.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(ServerName|AuthUserFile|DefaultRoot)'
+    parser: none
+    references:
+      - http://www.proftpd.org/docs/
+    tags: [r2-curated, linux]
+
+  - id: fstab
+    name: /etc/fstab
+    description: Filesystem mount table. Reveals mounted volumes, network shares, and credential-file references (e.g. credentials=... for CIFS mounts) used at boot.
+    path: /etc/fstab
+    os: [linux, bsd]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?m)^\s*(/dev/|UUID=|//|[^#\s]+)\s+/\S*\s+\S+\s+\S+'
+    parser: none
+    references:
+      - https://man7.org/linux/man-pages/man5/fstab.5.html
+    tags: [r2-curated, linux]
+
+  - id: supervisor-conf
+    name: Supervisor supervisord.conf
+    description: Supervisor process-manager config. Reveals managed programs, their command lines, and environment= blocks that frequently embed runtime secrets.
+    path: /etc/supervisor/supervisord.conf
+    alt_paths:
+      - /etc/supervisord.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*\[(supervisord|program:)'
+    parser: ini-config
+    references:
+      - http://supervisord.org/configuration.html
+    tags: [r2-curated, modern, linux]
+
+  - id: systemd-service-unit
+    name: systemd service unit
+    description: A systemd unit file. Reveals the ExecStart command, run-as User, and Environment/EnvironmentFile directives — the latter point straight at the service's secret env file.
+    path: /etc/systemd/system/app.service
+    alt_paths:
+      - /lib/systemd/system/app.service
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(\[Service\]|ExecStart=|EnvironmentFile=)'
+    parser: none
+    references:
+      - https://www.freedesktop.org/software/systemd/man/systemd.service.html
+    tags: [r2-curated, modern, linux]
+
+  - id: nfs-exports
+    name: /etc/exports
+    description: NFS export table. Reveals which directories are shared, to which hosts, and with what options (no_root_squash, rw) — exposes network-share attack surface.
+    path: /etc/exports
+    os: [linux, bsd]
+    info_goal: network-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?m)^\s*/\S+\s+\S+\('
+    parser: none
+    references:
+      - https://man7.org/linux/man-pages/man5/exports.5.html
+    tags: [r2-curated, linux]
+
+  - id: resolv-conf
+    name: /etc/resolv.conf
+    description: DNS resolver config. Reveals nameserver IPs and search domains — maps internal DNS infrastructure and the organization's internal domain naming.
+    path: /etc/resolv.conf
+    os: [linux, bsd, macos]
+    info_goal: network-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(nameserver|search|domain)\s'
+    parser: none
+    references:
+      - https://man7.org/linux/man-pages/man5/resolv.conf.5.html
+    tags: [r2-curated, linux]
+
+  - id: machine-id
+    name: /etc/machine-id
+    description: systemd machine identifier. A stable 32-hex-char host ID used to correlate hosts and, in some apps, to derive secret-seeding material.
+    path: /etc/machine-id
+    os: [linux]
+    info_goal: system-info
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '^[0-9a-f]{32}'
+    parser: none
+    references:
+      - https://www.freedesktop.org/software/systemd/man/machine-id.html
+    tags: [r2-curated, modern, linux]
