@@ -119,7 +119,24 @@ Low-effort correctness fix that the project's own retro already identified and p
 
 ---
 
-## Item 7 — Out-of-band / blind-LFI confirmation hooks (Priority: MEDIUM)
+## Item 7 — Out-of-band / blind-LFI confirmation hooks (Priority: MEDIUM) — ⚙️ PARTIALLY SHIPPED (r9)
+
+> Shipped on branch `worker-r9-exhumed`: the **payload-generator half** of this
+> item, scoped exactly like Item 5's php-filter generator. New `internal/oob`
+> package + `exhumed payload oob --domain <collaborator>` emits four OOB payload
+> classes (`smb-unc`, `http-wrapper`, `https-wrapper`, `dns-resolve`) ordered most-
+> to-least reliable, with `--label` (per-technique subdomain attribution),
+> `--share`/`--path` customisation, and `--json` output. Pure-Go string
+> construction, no network I/O, no listener, no cgo, MIT-clean — preserving the
+> static-binary constraint.
+>
+> **Deliberately NOT in this lap (the larger follow-on the roadmap warned about):**
+> the out-of-process listener / interaction-correlation half (interactsh-client
+> mode, a built-in HTTP/DNS poller, auto-tagging a `Detection` as `oob-callback`,
+> and the `--oob` flag on `scan` that fires these during a live scan). The full
+> item is ~280–300K and carries an external-backend design question; splitting off
+> the generator keeps each piece inside one budgeted lap. A future lap should take
+> the listener/correlation slice as its own scoped deliverable.
 
 ### What
 Detection today is purely response-body pattern matching (`internal/detect`). Many real LFI sinks are *blind*: the file is read into a template/log/SSRF path but never reflected in the HTTP response. Add an OOB confirmation path so a blind read can still be proven — e.g. force the target to read an attacker-controlled UNC/`http://` path (`\\\\<collab>\\share`, `php://filter` to an external resource) and confirm via an interaction callback.

