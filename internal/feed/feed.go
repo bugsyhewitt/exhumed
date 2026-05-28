@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/mod/semver"
 )
 
 // VersionMarkerFile is the filename in the cache dir that records the installed
@@ -250,15 +252,43 @@ func IsNewer(a, b string) bool {
 }
 
 // newer reports whether remote is a newer version than local.
-// Both are either semver strings or date strings (YYYY-MM-DD).
 // Empty local means "not installed" → remote is always newer.
+//
+// When both versions are semver-shaped, they are compared with a real semver
+// comparator (golang.org/x/mod/semver) so that, for example, 1.10.0 correctly
+// ranks above 1.9.0 — a case the previous lexicographic compare got wrong. When
+// either version is not semver-shaped (the common YYYY-MM-DD date scheme is not,
+// because it has no leading "v" and uses zero-padded fields), the comparison
+// falls back to lexicographic ordering, which is correct for fixed-width
+// date strings.
 func newer(remote, local string) bool {
 	if local == "" {
 		return true
 	}
-	// Simple lexicographic comparison works for both YYYY-MM-DD and semver
-	// with consistent formatting.
+	rv, lv := semverCanonical(remote), semverCanonical(local)
+	if rv != "" && lv != "" {
+		return semver.Compare(rv, lv) > 0
+	}
+	// Fallback: lexicographic comparison. Correct for fixed-width YYYY-MM-DD
+	// date versions and any other consistently-formatted scheme.
 	return remote > local
+}
+
+// semverCanonical normalizes a bare version string into a canonical semver
+// value (with the leading "v" that golang.org/x/mod/semver requires) and returns
+// it, or "" if v is not a valid semver. The feed's DB versions are written
+// without a "v" prefix (e.g. "1.2.0"), so the prefix is added before validation.
+func semverCanonical(v string) string {
+	if v == "" {
+		return ""
+	}
+	if !strings.HasPrefix(v, "v") {
+		v = "v" + v
+	}
+	if !semver.IsValid(v) {
+		return ""
+	}
+	return semver.Canonical(v)
 }
 
 func sha256hex(data []byte) string {
