@@ -150,6 +150,34 @@ against. Resuming with a different target, marker, or database is **refused**
 actually attempted against the current scan. Delete the file to start fresh. State
 is flushed atomically after every entry, so an interrupted scan never corrupts it.
 
+### Scanning a custom wordlist (SecLists interop)
+
+The curated database is the moat, but sometimes you have a target-specific or
+community wordlist of candidate paths (a SecLists LFI list, paths harvested from
+recon, an app's known config locations). `--paths-file` scans those paths
+*alongside* the curated database, fed through the same traversal engine.
+
+```bash
+# Scan the curated database AND every path in the wordlist
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --paths-file ./SecLists/Fuzzing/LFI/LFI-Jhaddix.txt
+```
+
+Wordlist format (matches SecLists and similar lists):
+
+- one candidate file path per line
+- blank lines are skipped
+- lines starting with `#` are treated as comments
+- duplicate paths are de-duplicated (first occurrence wins)
+
+Each path becomes a synthetic entry with a *weak confirm* — any readable, non-
+trivial `2xx` body counts as a hit — and the parser is inferred from the path
+(`.env`/`.ini`/`.conf` → config, `passwd` → unix-passwd, `id_rsa` → ssh-key,
+`environ` → proc-environ, otherwise generic secret scraping). The curated
+database always runs first; the wordlist purely extends coverage. A missing or
+unreadable wordlist file is a hard error, so you never silently scan the curated
+set only. Combine with `--techniques` to keep request volume sane on large lists.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash

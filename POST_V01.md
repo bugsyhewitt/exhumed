@@ -173,7 +173,19 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; SecLists interop; ~~WAF-evasion encodings~~ ✅ shipped (r11). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+
+> **SecLists interop — shipped on branch `worker-r12-exhumed`:** new
+> `internal/pathlist` package parses SecLists-style wordlists (one path per line,
+> `#` comments and blanks skipped, de-duplicated first-occurrence-wins) into
+> synthetic weak-confirm `db.CompiledEntry` values with a pre-compiled confirm
+> regex and a path-inferred parser hint. Exposed via a `scan --paths-file
+> <wordlist>` flag: the named paths are scanned through the normal traversal
+> engine *alongside* the curated database (curated first, wordlist extends
+> coverage). A missing/unreadable wordlist is a hard error (fail loud, never
+> silently scan the curated set only). Pure-Go, no new dependencies, no
+> type-contract changes, default off (purely additive). Combines with
+> `--techniques` to bound request volume on large lists.
 
 > **WAF-evasion encodings — shipped on branch `worker-r11-exhumed`:** five new
 > WAF-bypass traversal techniques added to `internal/traversal` (`waf-double-slash`
