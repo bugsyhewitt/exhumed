@@ -150,6 +150,27 @@ against. Resuming with a different target, marker, or database is **refused**
 actually attempted against the current scan. Delete the file to start fresh. State
 is flushed atomically after every entry, so an interrupted scan never corrupts it.
 
+### Redirect handling
+
+By default `scan` does **not** follow `3xx` redirects: the redirect response is
+reported verbatim, preserving the original status code and `Location` header.
+This is the correct default for a fuzzer — a vulnerable parameter that responds
+`302 → /login` must not be reported as the login page's `200`, which would both
+hide the real status and risk a false-positive confirmation against the login
+page body. Not following also halves request volume on redirect-heavy targets.
+
+When you genuinely want to land on the redirect target — for example the file is
+served behind a redirect, or you are following an auth flow — opt in with
+`--follow-redirects`:
+
+```bash
+# Default: a 302 is reported as a 302 (Location preserved, target NOT fetched)
+exhumed scan --url "http://target.local/?file=FUZZ"
+
+# Follow redirects to the final response (up to Go's default redirect cap)
+exhumed scan --url "http://target.local/?file=FUZZ" --follow-redirects
+```
+
 ### Scanning a custom wordlist (SecLists interop)
 
 The curated database is the moat, but sometimes you have a target-specific or
