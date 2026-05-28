@@ -1,0 +1,140 @@
+schema_version: 1
+group:
+  id: version-control
+  name: Version Control Metadata and Credential Files
+  description: >-
+    Exposed version-control metadata (git, subversion, mercurial) and the
+    credential caches VCS tooling leaves behind. A readable .git directory leaks
+    remote URLs with embedded credentials and enables full source-tree recovery;
+    credential helpers store tokens in plaintext.
+  os: [linux]
+  category: version-control
+entries:
+  - id: git-config-webroot
+    name: Exposed .git/config in webroot
+    description: Git config inside a deployed webroot. Reveals remote URLs (often https://user:token@host) and enables source recovery by walking the rest of the .git directory.
+    path: /var/www/html/.git/config
+    alt_paths:
+      - /app/.git/config
+      - /usr/share/nginx/html/.git/config
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - '[core]'
+        - 'repositoryformatversion'
+    parser: ini-config
+    references:
+      - https://git-scm.com/docs/git-config
+    tags: [r2-curated, modern, version-control]
+
+  - id: git-head-webroot
+    name: Exposed .git/HEAD in webroot
+    description: Git HEAD reference. The cheapest single-request confirmation that a .git directory is exposed under the webroot before dumping objects.
+    path: /var/www/html/.git/HEAD
+    alt_paths:
+      - /app/.git/HEAD
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '^ref:\s+refs/'
+    parser: none
+    references:
+      - https://git-scm.com/book/en/v2/Git-Internals-Git-References
+    tags: [r2-curated, modern, version-control]
+
+  - id: git-credentials-store
+    name: Git credentials store
+    description: Git credential-store helper file. Holds full https://user:password@host lines in plaintext for every remote the user authenticated to.
+    path: /root/.git-credentials
+    alt_paths:
+      - /home/ubuntu/.git-credentials
+      - /var/www/.git-credentials
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - 'https?://[^:@/]+:[^@/]+@'
+    parser: generic-secrets
+    references:
+      - https://git-scm.com/docs/git-credential-store
+    tags: [r2-curated, modern, version-control]
+
+  - id: netrc
+    name: .netrc credential file
+    description: Classic .netrc file consumed by curl, git, and ftp clients. Stores machine/login/password triples in plaintext for automated authentication.
+    path: /root/.netrc
+    alt_paths:
+      - /home/ubuntu/.netrc
+      - /var/www/.netrc
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'machine'
+        - 'password'
+    parser: generic-secrets
+    references:
+      - https://everything.curl.dev/usingcurl/netrc
+    tags: [r2-curated, version-control]
+
+  - id: svn-entries
+    name: Subversion .svn/entries
+    description: Subversion working-copy metadata. Exposes repository URLs and revision data; older formats enable pristine source recovery from the .svn store.
+    path: /var/www/html/.svn/entries
+    alt_paths:
+      - /app/.svn/entries
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(svn://|https?://.*/svn|dir)'
+    parser: none
+    references:
+      - https://svnbook.red-bean.com/
+    tags: [r2-curated, version-control]
+
+  - id: svn-wc-db
+    name: Subversion wc.db
+    description: Subversion 1.7+ working-copy SQLite database. Contains the repository root URL and node metadata used to reconstruct the source tree.
+    path: /var/www/html/.svn/wc.db
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'SQLite format 3'
+    parser: none
+    references:
+      - https://svn.apache.org/repos/asf/subversion/trunk/notes/wc-ng/
+    tags: [r2-curated, version-control]
+
+  - id: hg-hgrc
+    name: Mercurial .hg/hgrc
+    description: Mercurial repository config. Reveals the default-push remote (sometimes with embedded credentials) and paths/auth sections for the working clone.
+    path: /var/www/html/.hg/hgrc
+    alt_paths:
+      - /app/.hg/hgrc
+    os: [linux]
+    info_goal: source-code
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)\[(paths|auth|ui)\]'
+    parser: ini-config
+    references:
+      - https://www.mercurial-scm.org/doc/hgrc.5.html
+    tags: [r2-curated, version-control]

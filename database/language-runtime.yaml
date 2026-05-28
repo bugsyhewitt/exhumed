@@ -1,0 +1,162 @@
+schema_version: 1
+group:
+  id: language-runtime
+  name: Language Runtime Configuration Files
+  description: >-
+    Interpreter and runtime configuration for PHP, Python, Ruby, Node, and the
+    JVM. These reveal enabled extensions, include paths, disabled functions, and
+    log destinations — the information that turns a confirmed file read into a
+    concrete RCE-escalation plan (e.g. whether php://filter wrappers or
+    log-poisoning are viable).
+  os: [linux]
+  category: language-runtime
+entries:
+  - id: php-ini
+    name: PHP php.ini
+    description: PHP interpreter config. Reveals disable_functions, allow_url_include, open_basedir, and error_log location — decides whether wrapper-based RCE and log poisoning are possible.
+    path: /etc/php/8.2/fpm/php.ini
+    alt_paths:
+      - /etc/php/8.1/fpm/php.ini
+      - /etc/php/7.4/fpm/php.ini
+      - /usr/local/etc/php/php.ini
+      - /etc/php.ini
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(disable_functions|allow_url_include|open_basedir)\s*='
+    parser: ini-config
+    references:
+      - https://www.php.net/manual/en/ini.list.php
+    tags: [r2-curated, modern, language-runtime]
+
+  - id: php-fpm-pool
+    name: PHP-FPM pool config
+    description: PHP-FPM pool definition. Reveals the run-as user/group, listen socket, and per-pool env[] variables — the latter frequently carry database and API secrets.
+    path: /etc/php/8.2/fpm/pool.d/www.conf
+    alt_paths:
+      - /etc/php/7.4/fpm/pool.d/www.conf
+      - /usr/local/etc/php-fpm.d/www.conf
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(\[www\]|listen\s*=|user\s*=)'
+    parser: ini-config
+    references:
+      - https://www.php.net/manual/en/install.fpm.configuration.php
+    tags: [r2-curated, language-runtime]
+
+  - id: php-sessions
+    name: PHP session file
+    description: PHP serialized session store. Contains live session data — authenticated user IDs, CSRF tokens, and cart/login state. Hijackable when the session ID is recoverable.
+    path: /var/lib/php/sessions/sess_
+    alt_paths:
+      - /tmp/sess_
+      - /var/lib/php5/sess_
+    os: [linux]
+    info_goal: session-data
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '[a-zA-Z_][a-zA-Z0-9_]*\|[a-z]:'
+    parser: none
+    references:
+      - https://www.php.net/manual/en/session.configuration.php
+    tags: [r2-curated, language-runtime]
+
+  - id: python-pip-conf-user
+    name: Python pip user config
+    description: Per-user pip config. Reveals private index URLs (sometimes with inline credentials) used by the runtime's package installs.
+    path: /root/.pip/pip.conf
+    alt_paths:
+      - /home/ubuntu/.pip/pip.conf
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*\[(global|install)\]'
+    parser: ini-config
+    references:
+      - https://pip.pypa.io/en/stable/topics/configuration/
+    tags: [r2-curated, language-runtime]
+
+  - id: ruby-gemrc
+    name: Ruby .gemrc
+    description: RubyGems config. Reveals configured gem sources, which may be private registries with embedded API keys in the source URL.
+    path: /root/.gemrc
+    alt_paths:
+      - /home/ubuntu/.gemrc
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(:sources:|gem:|---)'
+    parser: none
+    references:
+      - https://guides.rubygems.org/command-reference/#gem-config
+    tags: [r2-curated, language-runtime]
+
+  - id: ruby-gem-credentials
+    name: RubyGems credentials
+    description: RubyGems API credential file. Stores the rubygems_api_key used to push gems — reusable to publish malicious package versions.
+    path: /root/.gem/credentials
+    alt_paths:
+      - /home/ubuntu/.gem/credentials
+    os: [linux]
+    info_goal: tokens
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(:rubygems_api_key:|api_key)'
+    parser: generic-secrets
+    references:
+      - https://guides.rubygems.org/api-key/
+    tags: [r2-curated, language-runtime]
+
+  - id: node-npm-logs
+    name: npm debug log
+    description: npm debug log written on install failure. Captures full command lines and resolved registry URLs, occasionally including tokens embedded in dependency URLs.
+    path: /root/.npm/_logs/
+    alt_paths:
+      - /home/node/.npm/_logs/
+    os: [linux]
+    info_goal: logs
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'npm verb'
+    parser: none
+    references:
+      - https://docs.npmjs.com/cli/commands/npm-cache
+    tags: [r2-curated, language-runtime]
+
+  - id: jvm-logging-properties
+    name: JVM logging.properties
+    description: Java util.logging config. Reveals log handlers and file destinations — identifies where application logs (a log-poisoning target) are written.
+    path: /opt/app/logging.properties
+    alt_paths:
+      - /etc/java/logging.properties
+      - /usr/lib/jvm/default-java/conf/logging.properties
+    os: [linux]
+    info_goal: config
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?im)^\s*(handlers|\.level)\s*='
+    parser: ini-config
+    references:
+      - https://docs.oracle.com/javase/8/docs/api/java/util/logging/LogManager.html
+    tags: [r2-curated, language-runtime]

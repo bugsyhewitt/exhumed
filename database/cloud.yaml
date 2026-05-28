@@ -1,0 +1,276 @@
+schema_version: 1
+group:
+  id: cloud
+  name: Cloud Provider Credential and Metadata Files
+  description: >-
+    Cloud-provider credential caches, SDK config, and instance metadata service
+    (IMDS) endpoints for AWS, GCP, Azure, DigitalOcean, and Alibaba. These yield
+    long-lived API keys, OAuth refresh tokens, and short-lived instance role
+    credentials — the pivot from a single host into the whole cloud account.
+  os: [linux]
+  category: cloud
+entries:
+  - id: aws-credentials
+    name: AWS shared credentials file
+    description: AWS CLI/SDK shared credentials. Contains aws_access_key_id and aws_secret_access_key per named profile — direct, often long-lived cloud-account access.
+    path: /root/.aws/credentials
+    alt_paths:
+      - /home/ubuntu/.aws/credentials
+      - /home/ec2-user/.aws/credentials
+      - /var/www/.aws/credentials
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'aws_access_key_id'
+        - 'aws_secret_access_key'
+    parser: env
+    references:
+      - https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html
+    tags: [r2-curated, modern, cloud]
+
+  - id: aws-config
+    name: AWS CLI config file
+    description: AWS CLI config. Reveals configured regions, named profiles, role_arn assume-role chains, and SSO start URLs — maps the account's role topology for privilege escalation.
+    path: /root/.aws/config
+    alt_paths:
+      - /home/ubuntu/.aws/config
+      - /home/ec2-user/.aws/config
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '\[(profile |default)'
+    parser: env
+    references:
+      - https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html
+    tags: [r2-curated, modern, cloud]
+
+  - id: aws-imds-iam-creds
+    name: AWS IMDS IAM role credentials (SSRF-via-LFI)
+    description: EC2 Instance Metadata Service role-credential endpoint. When an LFI sink also performs SSRF (php wrappers, curl-style fetchers) this returns AccessKeyId/SecretAccessKey/Token for the instance role — the canonical cloud pivot.
+    path: /latest/meta-data/iam/security-credentials/
+    os: [linux]
+    info_goal: credentials
+    privilege: any
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'AccessKeyId'
+        - 'SecretAccessKey'
+        - 'Token'
+    parser: generic-secrets
+    references:
+      - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html
+    tags: [r2-curated, modern, cloud, imds]
+    min_traversal: 0
+
+  - id: aws-imds-userdata
+    name: AWS IMDS user-data
+    description: EC2 instance user-data script delivered via IMDS. Frequently contains bootstrap secrets, embedded credentials, and cloud-init provisioning logic.
+    path: /latest/user-data
+    os: [linux]
+    info_goal: credentials
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(#!/bin/|#cloud-config|password|secret|token)'
+      negate:
+        - 'Not Found'
+    parser: generic-secrets
+    references:
+      - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-add-user-data.html
+    tags: [r2-curated, modern, cloud, imds]
+    min_traversal: 0
+
+  - id: gcp-adc
+    name: GCP application_default_credentials.json
+    description: Google Cloud SDK application default credentials. Contains a refresh_token or service-account private_key enabling GCP API access as the cached identity.
+    path: /root/.config/gcloud/application_default_credentials.json
+    alt_paths:
+      - /home/ubuntu/.config/gcloud/application_default_credentials.json
+      - /var/www/.config/gcloud/application_default_credentials.json
+    os: [linux]
+    info_goal: credentials
+    privilege: elevated
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(refresh_token|"private_key")'
+    parser: generic-secrets
+    references:
+      - https://cloud.google.com/docs/authentication/application-default-credentials
+    tags: [r2-curated, modern, cloud]
+
+  - id: gcp-service-account-key
+    name: GCP service-account key JSON
+    description: GCP service-account key file. Contains a private_key PEM and client_email — full impersonation of the service account against any GCP API it is granted.
+    path: /etc/gcp/service-account.json
+    alt_paths:
+      - /var/secrets/google/key.json
+      - /app/credentials.json
+      - /secrets/sa.json
+    os: [linux]
+    info_goal: service-account
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - '"type": "service_account"'
+        - 'private_key'
+    parser: generic-secrets
+    references:
+      - https://cloud.google.com/iam/docs/keys-create-delete
+    tags: [r2-curated, modern, cloud]
+
+  - id: gcp-imds-token
+    name: GCP metadata service-account token (SSRF-via-LFI)
+    description: GCP metadata server access-token endpoint. Reachable when the LFI sink also fetches URLs; returns a short-lived OAuth2 bearer token for the instance service account.
+    path: /computeMetadata/v1/instance/service-accounts/default/token
+    os: [linux]
+    info_goal: tokens
+    privilege: any
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'access_token'
+        - 'expires_in'
+    parser: generic-secrets
+    references:
+      - https://cloud.google.com/compute/docs/metadata/overview
+    tags: [r2-curated, modern, cloud, imds]
+    min_traversal: 0
+
+  - id: azure-imds-token
+    name: Azure IMDS managed-identity token (SSRF-via-LFI)
+    description: Azure Instance Metadata Service identity-token endpoint. Returns a bearer access_token for the VM's managed identity against Azure Resource Manager when the sink performs the fetch.
+    path: /metadata/identity/oauth2/token
+    os: [linux]
+    info_goal: tokens
+    privilege: any
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'access_token'
+        - 'token_type'
+    parser: generic-secrets
+    references:
+      - https://learn.microsoft.com/azure/virtual-machines/instance-metadata-service
+    tags: [r2-curated, modern, cloud, imds]
+    min_traversal: 0
+
+  - id: azure-profile
+    name: Azure CLI azureProfile.json
+    description: Azure CLI profile cache. Reveals subscription IDs, tenant IDs, and signed-in user/service-principal identity — maps the Azure account surface.
+    path: /root/.azure/azureProfile.json
+    alt_paths:
+      - /home/ubuntu/.azure/azureProfile.json
+    os: [linux]
+    info_goal: config
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'subscriptions'
+        - 'tenantId'
+    parser: generic-secrets
+    references:
+      - https://learn.microsoft.com/cli/azure/
+    tags: [r2-curated, modern, cloud]
+
+  - id: azure-access-tokens
+    name: Azure CLI accessTokens.json
+    description: Legacy Azure CLI token cache. Contains accessToken and refreshToken values for the signed-in identity — reusable for ARM API calls.
+    path: /root/.azure/accessTokens.json
+    alt_paths:
+      - /home/ubuntu/.azure/accessTokens.json
+    os: [linux]
+    info_goal: tokens
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - 'accessToken'
+        - 'refreshToken'
+    parser: generic-secrets
+    references:
+      - https://learn.microsoft.com/cli/azure/
+    tags: [r2-curated, cloud]
+
+  - id: do-imds-userdata
+    name: DigitalOcean metadata user-data (SSRF-via-LFI)
+    description: DigitalOcean droplet metadata user-data endpoint. Returns the provisioning script, which routinely embeds API tokens and SSH-injected credentials.
+    path: /metadata/v1/user-data
+    os: [linux]
+    info_goal: credentials
+    privilege: any
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(#!/bin/|#cloud-config|token|password)'
+      negate:
+        - 'not found'
+    parser: generic-secrets
+    references:
+      - https://docs.digitalocean.com/reference/api/metadata-api/
+    tags: [r2-curated, cloud, imds]
+    min_traversal: 0
+
+  - id: cloud-init-output-log
+    name: cloud-init output log
+    description: cloud-init provisioning log. Captures stdout/stderr of bootstrap scripts and frequently leaks credentials, tokens, and join secrets echoed during instance setup.
+    path: /var/log/cloud-init-output.log
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword
+      patterns:
+        - 'cloud-init'
+    parser: generic-secrets
+    references:
+      - https://cloudinit.readthedocs.io/en/latest/howto/debugging.html
+    tags: [r2-curated, modern, cloud]
+
+  - id: terraform-tfvars
+    name: Terraform terraform.tfvars
+    description: Terraform variable definitions. Commonly holds plaintext provider credentials, API tokens, and DB passwords supplied to the infrastructure plan.
+    path: /opt/terraform/terraform.tfvars
+    alt_paths:
+      - /app/terraform.tfvars
+      - /var/lib/terraform/terraform.tfvars
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: regex
+      patterns:
+        - '(?i)(access_key|secret_key|password|token)\s*='
+    parser: env
+    references:
+      - https://developer.hashicorp.com/terraform/language/values/variables
+    tags: [r2-curated, modern, cloud]
+
+  - id: terraform-tfstate
+    name: Terraform state file
+    description: Terraform state. Stores the full resource graph including resource attributes that frequently capture generated passwords and access keys in plaintext.
+    path: /opt/terraform/terraform.tfstate
+    alt_paths:
+      - /var/lib/terraform/terraform.tfstate
+    os: [linux]
+    info_goal: credentials
+    privilege: app-user
+    confirm:
+      type: keyword-all
+      patterns:
+        - '"terraform_version"'
+        - '"resources"'
+    parser: generic-secrets
+    references:
+      - https://developer.hashicorp.com/terraform/language/state
+    tags: [r2-curated, modern, cloud]
