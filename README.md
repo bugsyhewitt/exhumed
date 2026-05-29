@@ -458,6 +458,61 @@ are never filtered:** a real file surfaces regardless of its header block. A
 malformed rule (missing colon, empty header name, or an uncompilable regex) is a
 hard error before any request fires.
 
+### Filtering HTML title noise (`--filter-title`)
+
+The `--filter-*` flags so far inspect the body, its derived length / word /
+line counts, the status, the latency, or the response headers. None of them
+pin to the **HTML `<title>` element** — and that is the single surface on which
+many HTML-rendered web apps stamp their soft-404 / 403 noise most cleanly. A
+framework's "file not found" template typically carries a constant
+`<title>404 Not Found</title>`; a 403 page is `<title>Access denied</title>`
+or `<title>Forbidden</title>`. When the noise body's length, word count,
+status, and header block all drift per request — defeating
+`--filter-size`, `--filter-words`, `--filter-code`, and `--filter-headers` —
+its title is still a single constant string. `--filter-title` names that
+string and drops it. It is the **negative twin** of `--match-title`.
+
+The flag is repeatable; each value is one Go (RE2) regex applied as an
+unanchored "contains" match against the extracted title (entity-decoded,
+whitespace-collapsed — the same extractor `--match-title` uses):
+
+```bash
+# Drop the generic "404 Not Found" template
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-title '404 Not Found'
+
+# Drop every WAF/403 page in one go (case-insensitive alternation)
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-title '(?i)access denied|forbidden'
+```
+
+When more than one regex is supplied they compose as a **disjunction** — a
+response is suppressed if **any** regex matches the extracted title — the
+deliberate opposite of `--match-title`'s conjunction. (For suppression you
+want "drop if it looks like *any* known-noise title"; for keeping you want
+"show only if it satisfies *every* signal requirement.")
+
+```bash
+# Drop a response if its title looks like EITHER known noise template
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-title '404 Not Found' \
+             --filter-title '(?i)access denied'
+```
+
+A body whose response carries no extractable `<title>` element is **not**
+suppressed — the operator opted in to a title suppressor, so a body that has
+no title to inspect cannot be classified as title-shaped noise. (If you want
+to drop titleless bodies too, pair this with `--match-title` or another
+`--filter-*` gate.) `--filter-title` composes with `--filter-size`,
+`--filter-code`, `--filter-regex`, `--filter-time`, `--filter-words`,
+`--filter-lines`, and `--filter-headers`: a response is suppressed if *any* of
+them matches it. Like the others, it only quiets *unconfirmed* noise.
+**Confirmed hits are never filtered:** a real file surfaces regardless of the
+HTML chrome its body is rendered inside (a leaked `/etc/passwd` served
+through the same `<title>404 Not Found</title>` template still reports). An
+empty spec keeps everything (no-op); an unparsable regex is a hard error
+before any request fires.
+
 ### Keeping only interesting responses (`--match-regex`)
 
 The seven `--filter-*` flags above are *negative* — they say what to throw away.
