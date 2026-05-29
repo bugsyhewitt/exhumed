@@ -624,6 +624,48 @@ stream — **confirmed hits are always reported regardless of their word count**
 An empty spec keeps everything (no-op); a non-numeric, negative, or reversed-range
 term is a hard error before any request fires.
 
+### Keeping only interesting response line counts (`--match-lines`)
+
+`--match-lines` is the line-count sibling of
+`--match-regex`/`--match-code`/`--match-size`/`--match-time`/`--match-words` and
+the *positive* twin of `--filter-lines`: instead of naming the noise line count,
+name the signal count. An unconfirmed response is kept **only** if its body line
+count is in the allowlist, and every other response is dropped. This is the
+classic `ffuf -ml` (match-lines) workflow, the inverse of `--filter-lines`
+(`ffuf -fl`). The spec grammar matches `--match-size`/`--match-words` exactly —
+comma-separated exact counts and/or inclusive ranges:
+
+```bash
+# Keep only bodies whose line count lands where leaked file content does,
+# dropping the uniform soft-404 noise
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-lines 10-2000
+
+# Keep a single-line include (0 lines, no terminator) OR a specific leaked count
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-lines 0,27
+```
+
+`--match-lines` is the line-count companion to `--match-size`/`--match-words`:
+some soft-404 / WAF templates inject a *multi-word* varying fragment on a fixed
+line — an echoed query string, a `Request: GET /…` line, a stack-frame summary —
+so both the body's *byte length* and its *word count* wobble per request while the
+*line count* stays constant, leaving `--match-size` and `--match-words` unable to
+pin the interesting body. Line count is defined exactly as `ffuf` defines it: the
+number of newline (`\n`) terminators, so a body with N newlines has N lines, a
+CRLF body counts each `\r\n` once, and a single line with no trailing newline
+counts as zero lines. All six positive match gates **compose as a conjunction**:
+with `--match-lines`, `--match-words`, `--match-time`, `--match-size`,
+`--match-code`, and `--match-regex` active, an unconfirmed response is kept only
+if its line count is allowlisted **and** its word count is allowlisted **and** its
+round-trip time satisfies a bound **and** its body length is allowlisted **and**
+its status is allowlisted **and** its body matches the regex. The match gates run
+**before** the `--filter-*` suppressors, which then prune residual noise from the
+kept set. Like the other gates, `--match-lines` only governs the *unconfirmed*
+stream — **confirmed hits are always reported regardless of their line count**.
+An empty spec keeps everything (no-op); a non-numeric, negative, or reversed-range
+term is a hard error before any request fires.
+
 ### Keeping only interesting response headers (`--match-headers`)
 
 `--match-headers` is the **response-header** sibling of
@@ -657,11 +699,12 @@ exhumed scan --url "http://target.local/?file=FUZZ" \
 
 When more than one rule is supplied they **compose as a conjunction** — every
 rule must match. This extends the family's conjunction semantics to headers: with
-`--match-headers`, `--match-words`, `--match-time`, `--match-size`,
-`--match-code`, and `--match-regex` active, an unconfirmed response is kept only
-if its headers satisfy every rule **and** its word count is allowlisted **and**
-its round-trip time satisfies a bound **and** its body length is allowlisted
-**and** its status is allowlisted **and** its body matches the regex:
+`--match-headers`, `--match-lines`, `--match-words`, `--match-time`,
+`--match-size`, `--match-code`, and `--match-regex` active, an unconfirmed
+response is kept only if its headers satisfy every rule **and** its line count is
+allowlisted **and** its word count is allowlisted **and** its round-trip time
+satisfies a bound **and** its body length is allowlisted **and** its status is
+allowlisted **and** its body matches the regex:
 
 ```bash
 # Both rules must match: a plain-text Content-Type AND a PHP X-Powered-By banner
