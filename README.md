@@ -178,6 +178,34 @@ database always runs first; the wordlist purely extends coverage. A missing or
 unreadable wordlist file is a hard error, so you never silently scan the curated
 set only. Combine with `--techniques` to keep request volume sane on large lists.
 
+### Filtering response-size noise (`--filter-size`)
+
+Many web apps return a *fixed-size* "file not found" page (a soft-404 template, a
+WAF block page, a framework error view) for every path that does not exist. Those
+uniform responses flood the unconfirmed `[responded]` output and bury the signal.
+
+`--filter-size` is the classic `ffuf`/`gobuster` `-fs` workflow: name the byte
+length(s) of the known noise and exhumed drops responses of exactly those sizes
+from the `[responded]` stream. The spec is comma-separated and accepts both exact
+sizes and inclusive ranges:
+
+```bash
+# Drop the 1234-byte soft-404 page and any empty (0-byte) bodies
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-size 0,1234
+
+# Drop anything in the 100–200 byte noise band, plus the exact 1234-byte page
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-size 100-200,1234
+```
+
+This only quiets *unconfirmed* noise — it is a finer scalpel than `--only-hits`,
+which silences every non-hit wholesale. **Confirmed hits are never filtered:**
+confirmation in exhumed is content-based (the body satisfies an entry's confirm
+block), so a real file surfaces regardless of its size, even if that size is in
+your `--filter-size` spec. A malformed spec (non-numeric, negative, or a reversed
+range like `200-100`) is a hard error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash

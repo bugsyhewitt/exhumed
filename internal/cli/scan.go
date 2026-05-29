@@ -15,6 +15,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/inject"
 	"github.com/bugsyhewitt/exhumed/internal/output"
 	"github.com/bugsyhewitt/exhumed/internal/pathlist"
+	"github.com/bugsyhewitt/exhumed/internal/respfilter"
 	"github.com/bugsyhewitt/exhumed/internal/scanstate"
 	"github.com/bugsyhewitt/exhumed/internal/traversal"
 	"github.com/spf13/cobra"
@@ -44,6 +45,13 @@ type scanFlags struct {
 	outputFormat   string
 	resume         string
 	pathsFile      string
+	filterSize     string
+
+	// sizeFilter is the compiled form of filterSize, populated by runScan.
+	// It suppresses unconfirmed "[responded]" lines whose body length matches
+	// a known-noise size, mirroring the ffuf/gobuster -fs workflow. It never
+	// affects confirmed hits.
+	sizeFilter *respfilter.Filter
 }
 
 func newScanCmd() *cobra.Command {
@@ -89,6 +97,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text or json")
 	cmd.Flags().StringVar(&f.resume, "resume", "", "Persist per-entry progress to this file and skip already-attempted entries on restart")
 	cmd.Flags().StringVar(&f.pathsFile, "paths-file", "", "Scan additional file paths from a SecLists-style wordlist (one path per line; '#' comments and blanks ignored)")
+	cmd.Flags().StringVar(&f.filterSize, "filter-size", "", "Suppress unconfirmed responses whose body length matches a noise size. Comma-separated exact sizes and/or ranges, e.g. '0,413,100-200'. Confirmed hits are never filtered.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -108,6 +117,13 @@ type hitRecord struct {
 
 func runScan(f scanFlags) error {
 	outFmt, err := output.ParseFormat(f.outputFormat)
+	if err != nil {
+		return err
+	}
+
+	// Compile the response-size noise filter up front so a malformed spec
+	// fails before any requests fire.
+	f.sizeFilter, err = respfilter.Parse(f.filterSize)
 	if err != nil {
 		return err
 	}
@@ -377,7 +393,10 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 				elapsed:   r.Elapsed,
 			}, len(results)
 		}
-		if !f.onlyHits {
+		// Unconfirmed response: emit unless --only-hits silences everything or
+		// --filter-size flags this body length as known noise. Confirmed hits
+		// (handled above) are never affected by either gate.
+		if !f.onlyHits && !f.sizeFilter.Match(len(r.Body)) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
