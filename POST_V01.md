@@ -173,7 +173,23 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+
+> **Positive size matcher (`--match-size`) — shipped on branch
+> `worker-r22-exhumed`:** the `ffuf -ms` member of the positive keep-gate family,
+> joining `--match-regex` and `--match-code` (both shipped earlier). New
+> `internal/matchsize` package parses a comma-separated exact-size/range spec
+> (same grammar as `respfilter`'s `--filter-size`, including `0` and ranges) and
+> KEEPS an unconfirmed `[responded]` line only if its body length is in the
+> allowlist — the inverse polarity of `--filter-size`. Motivation: during recon a
+> single distinctive body-size band (or zero-length) is the signal amid uniform
+> soft-404 noise; rather than enumerating every noise size with `--filter-size`,
+> the operator names the one size worth keeping. The three positive match gates
+> (`--match-regex`/`--match-code`/`--match-size`) compose as a conjunction and run
+> before the five `--filter-*` suppressors; confirmed (content-based) hits are
+> never affected. Exposed via `scan --match-size 0,413,100-200`. Pure-Go (stdlib
+> only), no new dependencies, no type-contract changes, default off (purely
+> additive).
 
 > **Word-count noise filter (`--filter-words`) — shipped on branch
 > `worker-r21-exhumed`:** the `ffuf -fw` member of the noise-suppression family,

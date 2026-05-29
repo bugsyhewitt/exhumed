@@ -437,6 +437,37 @@ stream — **confirmed hits are always reported regardless of their status code*
 An empty spec keeps everything (no-op); a non-numeric, out-of-range, or reversed
 spec is a hard error before any request fires.
 
+### Keeping only interesting response sizes (`--match-size`)
+
+`--match-size` is the response-size sibling of `--match-regex`/`--match-code` and
+the *positive* twin of `--filter-size`: instead of naming the noise byte length,
+name the signal length. An unconfirmed response is kept **only** if its body
+length is in the allowlist, and every other size is dropped. This is the classic
+`ffuf -ms` (match-size) workflow, the inverse of `--filter-size` (`ffuf -fs`). The
+spec grammar matches `--filter-size` exactly — comma-separated exact byte lengths
+and/or inclusive ranges:
+
+```bash
+# Keep only responses in the size band where leaked file content lands,
+# dropping the uniform soft-404 template that floods every miss
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-size 400-9000
+
+# Keep only zero-length and a single distinctive size, dropping the rest
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-size 0,1734
+```
+
+All three positive match gates **compose as a conjunction**: with
+`--match-size`, `--match-code`, and `--match-regex` active, an unconfirmed
+response is kept only if its body length is allowlisted **and** its status is
+allowlisted **and** its body matches the regex. The match gates run **before**
+the `--filter-*` suppressors, which then prune residual noise from the kept set.
+Like the other gates, `--match-size` only governs the *unconfirmed* stream —
+**confirmed hits are always reported regardless of their body length**. An empty
+spec keeps everything (no-op); a non-numeric, negative, or reversed spec is a
+hard error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
