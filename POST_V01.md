@@ -173,7 +173,38 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23); ~~positive word-count matcher (`--match-words` / `ffuf -mw`)~~ ✅ shipped (r24); ~~line-count noise filter (`--filter-lines` / `ffuf -fl`)~~ ✅ shipped (r25). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23); ~~positive word-count matcher (`--match-words` / `ffuf -mw`)~~ ✅ shipped (r24); ~~line-count noise filter (`--filter-lines` / `ffuf -fl`)~~ ✅ shipped (r25); ~~response-header matcher (`--match-headers`)~~ ✅ shipped (r26). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+
+> **Response-header matcher (`--match-headers`) — shipped on branch
+> `worker-r26-exhumed`:** the response-**header** member of the positive
+> keep-gate family, extending it to a surface none of the prior matchers
+> (`--match-regex` body, `--match-code` status, `--match-size` length,
+> `--match-time` latency, `--match-words` word count) inspect. New
+> `internal/matchheaders` package parses a *repeatable* `Header-Name: regex`
+> spec (one rule per `--match-headers` occurrence, mirroring the existing
+> repeatable `-H`/`--header` flag) and KEEPS an unconfirmed `[responded]` line
+> only if **every** rule is satisfied — the named header is present (canonical,
+> case-insensitive lookup via `textproto.CanonicalMIMEHeaderKey`) and at least
+> one of its values matches the rule's RE2 regex. Motivation: when an LFI payload
+> reads and serves a real file the response *headers* shift in ways the body does
+> not — a sniffed `Content-Type` (`text/html` → `text/plain`/`x-php`/
+> `octet-stream`), a `Content-Disposition: attachment`, a changed
+> `X-Powered-By`/`Server` banner, a new `Set-Cookie` — so the header block
+> distinguishes a genuine read from soft-404/WAF noise whose body, size, words,
+> and status are identical. There is no single `ffuf` equivalent (its matchers
+> are body/status/size/word/line oriented), so this rounds out the family for the
+> LFI use case. Multiple rules compose as a conjunction and the whole header gate
+> composes with the other five match gates (still a conjunction) ahead of the
+> `--filter-*` suppressors; content-confirmed hits are never affected. Exposed via
+> `scan --match-headers 'Content-Type: text/(plain|x-php)'`. Pure-Go (stdlib
+> `net/http`/`net/textproto`/`regexp` only), no new dependencies, no type-contract
+> changes, default off (purely additive).
+>
+> **Verification before implementation:** grepped the full tree for
+> `match-headers`/`filter-headers`/`MatchHeaders`/`FilterHeaders` — neither
+> candidate existed. Per the dispatch instruction, implemented the positive
+> matcher (`--match-headers`), the more useful of the two for surfacing real
+> file reads and consistent with the recent run of positive matchers (r22–r24).
 
 > **Line-count noise filter (`--filter-lines`) — shipped on branch
 > `worker-r25-exhumed`:** the `ffuf -fl` member of the negative suppression

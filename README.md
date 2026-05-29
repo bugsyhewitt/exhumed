@@ -575,6 +575,62 @@ stream — **confirmed hits are always reported regardless of their word count**
 An empty spec keeps everything (no-op); a non-numeric, negative, or reversed-range
 term is a hard error before any request fires.
 
+### Keeping only interesting response headers (`--match-headers`)
+
+`--match-headers` is the **response-header** sibling of
+`--match-regex`/`--match-code`/`--match-size`/`--match-time`/`--match-words`. It
+inspects a surface none of the other matchers touch: the response *header block*.
+When an LFI payload makes the target read and serve a real file, the headers
+frequently shift in ways the body does not — a sniffed `Content-Type` flips from
+`text/html` to `text/plain` or `application/octet-stream`, a
+`Content-Disposition: attachment` appears, an `X-Powered-By` or `Server` banner
+changes, a `Set-Cookie` shows up. `--match-headers` keeps **only** the
+unconfirmed responses whose headers carry those signals and drops the uniform
+soft-404 / WAF noise whose body, size, word count, and status are all
+indistinguishable — but whose header block is not.
+
+The flag is **repeatable**; each value is one `Header-Name: regex` rule. The
+header name is matched case-insensitively (HTTP header names are
+case-insensitive); the value side is a Go (RE2) "contains" match against each
+value of that header. A rule is satisfied when the named header is present **and**
+at least one of its values matches:
+
+```bash
+# Keep only responses the server served as plain text or a PHP source file —
+# a strong signal an include was read raw rather than executed
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-headers 'Content-Type: text/(plain|x-php)'
+
+# Keep only responses the server offered as a file download
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-headers 'Content-Disposition: attachment'
+```
+
+When more than one rule is supplied they **compose as a conjunction** — every
+rule must match. This extends the family's conjunction semantics to headers: with
+`--match-headers`, `--match-words`, `--match-time`, `--match-size`,
+`--match-code`, and `--match-regex` active, an unconfirmed response is kept only
+if its headers satisfy every rule **and** its word count is allowlisted **and**
+its round-trip time satisfies a bound **and** its body length is allowlisted
+**and** its status is allowlisted **and** its body matches the regex:
+
+```bash
+# Both rules must match: a plain-text Content-Type AND a PHP X-Powered-By banner
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-headers 'Content-Type: text/plain' \
+             --match-headers 'X-Powered-By: PHP'
+```
+
+There is no single `ffuf` flag for header matching — its matchers are
+body/status/size/word/line oriented — so `--match-headers` is the header-surface
+complement that rounds out the family for the LFI use case. The match gates run
+**before** the `--filter-*` suppressors, which then prune residual noise from the
+kept set. Like the other gates, `--match-headers` only governs the *unconfirmed*
+stream — **confirmed hits are always reported regardless of their headers**. An
+empty spec keeps everything (no-op); a rule missing its colon, with an empty
+header name, or with an unparsable regex is a hard error before any request
+fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash

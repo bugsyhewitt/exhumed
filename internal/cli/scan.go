@@ -18,6 +18,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/linefilter"
 	"github.com/bugsyhewitt/exhumed/internal/matchcode"
 	"github.com/bugsyhewitt/exhumed/internal/matchfilter"
+	"github.com/bugsyhewitt/exhumed/internal/matchheaders"
 	"github.com/bugsyhewitt/exhumed/internal/matchsize"
 	"github.com/bugsyhewitt/exhumed/internal/matchtime"
 	"github.com/bugsyhewitt/exhumed/internal/matchwords"
@@ -68,6 +69,7 @@ type scanFlags struct {
 	matchSize       string
 	matchTime       string
 	matchWords      string
+	matchHeaders    []string
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -167,6 +169,20 @@ type scanFlags struct {
 	// (every match gate must pass before the suppression filters run); an
 	// inactive wordMatcher keeps everything. Confirmed hits are never affected.
 	wordMatcher *matchwords.Filter
+
+	// headerMatcher is the compiled form of matchHeaders, populated by runScan.
+	// It is the response-header sibling of matchFilter/codeMatcher/sizeMatcher/
+	// timeMatcher/wordMatcher and inspects a surface none of them touch: the
+	// response header block. When active, an unconfirmed "[responded]" line is
+	// KEPT only if EVERY supplied "Header-Name: regex" rule is satisfied (the
+	// named header is present and at least one value matches), letting the
+	// operator surface a sniffed Content-Type, a Content-Disposition: attachment,
+	// or a changed X-Powered-By/Server banner that distinguishes a real file read
+	// from the uniform soft-404/WAF noise whose body, size, words, and status are
+	// identical. It composes with the other match gates as a conjunction (every
+	// match gate must pass before the suppression filters run); an inactive
+	// headerMatcher keeps everything. Confirmed hits are never affected.
+	headerMatcher *matchheaders.Filter
 }
 
 func newScanCmd() *cobra.Command {
@@ -225,6 +241,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.matchSize, "match-size", "", "Keep only unconfirmed responses whose body length matches this allowlist. Comma-separated exact sizes and/or ranges, e.g. '0,413' or '100-200' (ffuf -ms workflow). The match gates run before the --filter-* suppressors; composes with --match-regex and --match-code (all must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringVar(&f.matchTime, "match-time", "", "Keep only unconfirmed responses whose round-trip time satisfies a comparator bound (ffuf -mt workflow). Comma-separated terms of '>'/'>='/'<'/'<=' plus a Go duration, e.g. '>50ms' or '>1s,<5ms'. Keeps the slow minority a real disk read produces and drops the uniform fast noise. The match gates run before the --filter-* suppressors; composes with --match-regex, --match-code and --match-size (all must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringVar(&f.matchWords, "match-words", "", "Keep only unconfirmed responses whose body word count matches this allowlist (ffuf -mw workflow). Comma-separated exact counts and/or ranges, e.g. '0,42' or '10-20'. The word-count twin of --match-size: catches the interesting body when a varying token makes its byte length unstable. The match gates run before the --filter-* suppressors; composes with --match-regex, --match-code, --match-size and --match-time (all must pass). Confirmed hits are always reported regardless.")
+	cmd.Flags().StringArrayVar(&f.matchHeaders, "match-headers", nil, "Keep only unconfirmed responses whose RESPONSE headers match. Repeatable; each value is one 'Header-Name: regex' rule (RE2 'contains' match on the header value, case-insensitive header name), e.g. --match-headers 'Content-Type: text/(plain|x-php)' --match-headers 'Content-Disposition: attachment'. Multiple rules compose as a conjunction (all must match). Inspects a surface no other matcher touches — a sniffed Content-Type, an attachment disposition, or a changed X-Powered-By banner often distinguishes a real file read from soft-404 noise whose body, size, words, and status are identical. The match gates run before the --filter-* suppressors; composes with --match-regex, --match-code, --match-size, --match-time and --match-words (all must pass). Confirmed hits are always reported regardless.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -291,6 +308,10 @@ func runScan(f scanFlags) error {
 		return err
 	}
 	f.wordMatcher, err = matchwords.Parse(f.matchWords)
+	if err != nil {
+		return err
+	}
+	f.headerMatcher, err = matchheaders.Parse(f.matchHeaders)
 	if err != nil {
 		return err
 	}
@@ -586,15 +607,16 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// --match-size is active and this body length is NOT in the allowlist,
 		// --match-time is active and this round-trip duration does NOT satisfy a
 		// require-bound, --match-words is active and this body's word count is NOT
-		// in the allowlist (the five positive keep-gates, applied first as a
-		// conjunction), --filter-size flags this body length as known noise,
+		// in the allowlist, --match-headers is active and this response's headers
+		// do NOT satisfy every require rule (the six positive keep-gates, applied
+		// first as a conjunction), --filter-size flags this body length as known noise,
 		// --filter-code flags this status code as known noise, --filter-regex
 		// matches this body's content as known noise, --filter-time flags this
 		// round-trip duration as known noise, --filter-words flags this body's
 		// word count as known noise, or --filter-lines flags this body's line
 		// count as known noise. Confirmed hits (handled above) are never affected
 		// by any of these gates.
-		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) {
+		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
