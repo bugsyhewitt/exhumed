@@ -345,6 +345,38 @@ four matches it. Like the others, it only quiets *unconfirmed* noise.
 or slow it responded. A malformed spec (missing comparator, bad duration, or a
 negative threshold) is a hard error before any request fires.
 
+### Keeping only interesting responses (`--match-regex`)
+
+The four `--filter-*` flags above are *negative* — they say what to throw away.
+`--match-regex` is their *positive* twin: it says what to keep. Instead of naming
+the noise, name the signal — a single Go (RE2) regex; an unconfirmed response is
+kept **only** if its body matches, and every non-matching response is dropped.
+This is the classic `ffuf -mr` (match-regex) workflow, the inverse of
+`--filter-regex` (`ffuf -fr`). It is ideal for recon against a large
+`--paths-file` wordlist where you only care about pages that mention a secret-ish
+marker:
+
+```bash
+# Keep only unconfirmed responses whose body mentions a password
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --paths-file seclists/Discovery/Web-Content/common.txt \
+             --match-regex 'password'
+
+# Case-insensitive: keep anything that smells like a credential or key
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-regex '(?i)secret|api[_-]?key|BEGIN [A-Z ]+PRIVATE KEY'
+```
+
+The match gate runs **first** — it narrows the haystack to interesting bodies —
+and the `--filter-*` suppressors then prune residual noise from the kept set, so
+the two compose cleanly (e.g. `--match-regex 'password' --filter-regex
+'(?i)reset your password'` keeps password mentions but still drops the generic
+"reset your password" page). Like the filters, `--match-regex` only governs the
+*unconfirmed* stream. **Confirmed hits are always reported regardless of whether
+they match** — a real file read surfaces even if its body doesn't mention your
+recon pattern. An empty spec keeps everything (no-op); a malformed regex is a hard
+error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
