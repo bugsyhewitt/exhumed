@@ -409,9 +409,58 @@ others, it only quiets *unconfirmed* noise. **Confirmed hits are never filtered:
 a real file surfaces regardless of its line count. A malformed spec (non-numeric,
 negative, or a reversed range) is a hard error before any request fires.
 
+### Filtering response-header noise (`--filter-headers`)
+
+Every `--filter-*` flag so far inspects the response *body* (or its derived
+length, word count, line count), its *status*, or its *latency*. None of them
+touch the **response header block** — and that is exactly the surface where a
+soft-404/WAF/CDN page often reveals itself most reliably. A CDN may stamp every
+miss with `X-Cache: HIT` and a fixed `Server: cloudflare` banner; a framework's
+"not found" template may always be `Content-Type: text/html` where a leaked file
+would sniff to `text/plain`; an app may carry an `X-Powered-By` on its error page
+that real file reads do not. When the noise body's length, word count, and status
+all drift per request — defeating `--filter-size`, `--filter-words`, and
+`--filter-code` — its header signature frequently stays constant.
+`--filter-headers` names that signature and drops it. It is the **negative twin**
+of `--match-headers`.
+
+The flag is repeatable; each value is one `Header-Name: regex` rule (an RE2
+"contains" match against the header value; the header name is case-insensitive):
+
+```bash
+# Drop every response a CDN short-circuited with an X-Cache: HIT
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-headers 'X-Cache: HIT'
+
+# Drop the framework soft-404 template by its constant Content-Type
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-headers 'Content-Type: text/html'
+```
+
+When more than one rule is supplied they compose as a **disjunction** — a
+response is suppressed if **any** rule matches — the deliberate opposite of
+`--match-headers`'s conjunction. (For suppression you want "drop if it looks like
+*any* known-noise signature"; for keeping you want "show only if it satisfies
+*every* signal requirement.")
+
+```bash
+# Drop responses that are EITHER a cloudflare miss OR a PHP error page
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-headers 'Server: cloudflare' \
+             --filter-headers 'X-Powered-By: PHP'
+```
+
+A header that is absent never satisfies its rule. `--filter-headers` composes
+with `--filter-size`, `--filter-code`, `--filter-regex`, `--filter-time`,
+`--filter-words`, and `--filter-lines`: a response is suppressed if *any* of them
+matches it. Like the others, it only quiets *unconfirmed* noise. **Confirmed hits
+are never filtered:** a real file surfaces regardless of its header block. A
+malformed rule (missing colon, empty header name, or an uncompilable regex) is a
+hard error before any request fires.
+
 ### Keeping only interesting responses (`--match-regex`)
 
-The six `--filter-*` flags above are *negative* — they say what to throw away.
+The seven `--filter-*` flags above are *negative* — they say what to throw away.
 `--match-regex` is their *positive* twin: it says what to keep. Instead of naming
 the noise, name the signal — a single Go (RE2) regex; an unconfirmed response is
 kept **only** if its body matches, and every non-matching response is dropped.
