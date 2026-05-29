@@ -339,8 +339,9 @@ exhumed scan --url "http://target.local/?file=FUZZ" \
 
 A bare number with no comparator is rejected — timing filters are directional, so
 you must say which side is noise. `--filter-time` composes with `--filter-size`,
-`--filter-code`, `--filter-regex`, and `--filter-words`: a response is suppressed
-if *any* of them matches it. Like the others, it only quiets *unconfirmed* noise.
+`--filter-code`, `--filter-regex`, `--filter-words`, and `--filter-lines`: a
+response is suppressed if *any* of them matches it. Like the others, it only
+quiets *unconfirmed* noise.
 **Confirmed hits are never filtered:** a real file surfaces regardless of how fast
 or slow it responded. A malformed spec (missing comparator, bad duration, or a
 negative threshold) is a hard error before any request fires.
@@ -370,15 +371,47 @@ exhumed scan --url "http://target.local/?file=FUZZ" \
 Word count is defined exactly as `ffuf` and Go's `strings.Fields` define it: the
 number of maximal runs of non-whitespace characters (an empty body is zero
 words). `--filter-words` composes with `--filter-size`, `--filter-code`,
-`--filter-regex`, and `--filter-time`: a response is suppressed if *any* of the
-five matches it. Like the others, it only quiets *unconfirmed* noise.
+`--filter-regex`, `--filter-time`, and `--filter-lines`: a response is suppressed
+if *any* of them matches it. Like the others, it only quiets *unconfirmed* noise.
 **Confirmed hits are never filtered:** a real file surfaces regardless of its
 word count. A malformed spec (non-numeric, negative, or a reversed range) is a
 hard error before any request fires.
 
+### Filtering response-line-count noise (`--filter-lines`)
+
+Word-count filtering still misses a soft-404 whose varying token is itself
+*multi-word* — an echoed query string, a `Request: GET /…` line, a stack-frame
+summary. Then both the byte length *and* the word count wobble per request, so
+`--filter-size` and `--filter-words` both miss it. The *line count*, though,
+stays constant: the noise template always has the same number of lines, only the
+content of one line changes. `--filter-lines` is the line-count companion to
+`--filter-words` — the classic `ffuf -fl` workflow. Name the line count(s) of the
+known noise and exhumed drops responses with exactly that many lines:
+
+```bash
+# The block page is always 5 lines even though its byte length and word count
+# both drift (it echoes the request line) — pin it by line count
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-lines 5
+
+# Comma-separated exact counts and/or inclusive ranges
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-lines 0,5,10-20
+```
+
+Line count is defined exactly as `ffuf` defines its "Lines" metric: the number of
+newline (`\n`) characters in the body. A body with no trailing newline does not
+count its final fragment as a line, and `\r\n` (CRLF) counts as one line because
+only the `\n` is counted (an empty body is zero lines). `--filter-lines` composes
+with `--filter-size`, `--filter-code`, `--filter-regex`, `--filter-time`, and
+`--filter-words`: a response is suppressed if *any* of them matches it. Like the
+others, it only quiets *unconfirmed* noise. **Confirmed hits are never filtered:**
+a real file surfaces regardless of its line count. A malformed spec (non-numeric,
+negative, or a reversed range) is a hard error before any request fires.
+
 ### Keeping only interesting responses (`--match-regex`)
 
-The five `--filter-*` flags above are *negative* — they say what to throw away.
+The six `--filter-*` flags above are *negative* — they say what to throw away.
 `--match-regex` is their *positive* twin: it says what to keep. Instead of naming
 the noise, name the signal — a single Go (RE2) regex; an unconfirmed response is
 kept **only** if its body matches, and every non-matching response is dropped.
