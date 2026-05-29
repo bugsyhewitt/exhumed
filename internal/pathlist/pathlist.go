@@ -33,12 +33,32 @@ import (
 const weakConfirmPattern = `.`
 
 // Parse reads a wordlist from r and returns one synthetic CompiledEntry per
-// unique, non-comment path. Entries are returned in first-seen order. The
+// unique, non-comment path. It is shorthand for ParseWithExtensions with no
+// extensions, preserving the original one-entry-per-line behaviour.
+func Parse(r io.Reader, source string) ([]db.CompiledEntry, error) {
+	return ParseWithExtensions(r, source, nil)
+}
+
+// ParseWithExtensions reads a wordlist from r and returns synthetic
+// CompiledEntry values. Each unique, non-comment base path yields one entry,
+// and — for every normalised extension in exts — one additional entry whose
+// path has that extension appended (the ffuf "-e .php,.bak" workflow). The
 // confirm regex is pre-compiled exactly as the YAML loader would compile it, so
 // the returned entries are immediately usable by detect.Check.
 //
+// Entries are emitted in a stable order: for each base path (first-seen order),
+// the bare path comes first, then each appended-extension variant in the order
+// the extensions were supplied. Variants are de-duplicated against the set of
+// base paths and against each other, so a base path that already ends in a
+// requested extension is not scanned twice.
+//
 // source is used only for diagnostics in entry IDs and SourceFile.
-func Parse(r io.Reader, source string) ([]db.CompiledEntry, error) {
+func ParseWithExtensions(r io.Reader, source string, exts []string) ([]db.CompiledEntry, error) {
+	normExts, err := NormalizeExtensions(exts)
+	if err != nil {
+		return nil, err
+	}
+
 	weakRE, err := regexp.Compile(weakConfirmPattern)
 	if err != nil {
 		// weakConfirmPattern is a compile-time constant; this never fails.
@@ -47,6 +67,15 @@ func Parse(r io.Reader, source string) ([]db.CompiledEntry, error) {
 
 	var entries []db.CompiledEntry
 	seen := make(map[string]struct{})
+
+	// emit appends an entry for path if it has not already been emitted.
+	emit := func(path string) {
+		if _, dup := seen[path]; dup {
+			return
+		}
+		seen[path] = struct{}{}
+		entries = append(entries, synthFromPath(path, source, weakRE))
+	}
 
 	sc := bufio.NewScanner(r)
 	// Allow long lines: some wordlists carry very long encoded paths.
@@ -57,12 +86,10 @@ func Parse(r io.Reader, source string) ([]db.CompiledEntry, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if _, dup := seen[line]; dup {
-			continue
+		emit(line)
+		for _, ext := range normExts {
+			emit(line + ext)
 		}
-		seen[line] = struct{}{}
-
-		entries = append(entries, synthFromPath(line, source, weakRE))
 	}
 	if err := sc.Err(); err != nil {
 		return nil, fmt.Errorf("pathlist: read %s: %w", source, err)
@@ -74,12 +101,20 @@ func Parse(r io.Reader, source string) ([]db.CompiledEntry, error) {
 // an error so the operator learns immediately rather than silently scanning the
 // curated database only.
 func ParseFile(path string) ([]db.CompiledEntry, error) {
+	return ParseFileWithExtensions(path, nil)
+}
+
+// ParseFileWithExtensions opens path and delegates to ParseWithExtensions,
+// appending each normalised extension to every wordlist entry. A missing or
+// unreadable file is an error so the operator learns immediately rather than
+// silently scanning the curated database only.
+func ParseFileWithExtensions(path string, exts []string) ([]db.CompiledEntry, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("pathlist: open %s: %w", path, err)
 	}
 	defer f.Close()
-	return Parse(f, path)
+	return ParseWithExtensions(f, path, exts)
 }
 
 // synthFromPath builds a weak-confirm CompiledEntry for a single wordlist path.

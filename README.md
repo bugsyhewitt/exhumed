@@ -199,6 +199,34 @@ database always runs first; the wordlist purely extends coverage. A missing or
 unreadable wordlist file is a hard error, so you never silently scan the curated
 set only. Combine with `--techniques` to keep request volume sane on large lists.
 
+#### Appending extensions (`--extensions`)
+
+Many discovery wordlists list *base* names without a file extension (`config`,
+`admin`, `backup`, `wp-config`) because the live extension depends on the stack.
+`--extensions` is the `ffuf -e` workflow: append one or more extensions to every
+`--paths-file` entry so a single base name fans out into the variants worth
+trying.
+
+```bash
+# Scan each wordlist path AND its .php / .bak / .old variants
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --paths-file ./names.txt \
+             --extensions .php,.bak,.old
+```
+
+A line `config` with `--extensions .php,.bak,.old` scans `config`, `config.php`,
+`config.bak`, and `config.old`. The leading dot is optional (`php` and `.php`
+are equivalent), case is preserved (paths are case-sensitive), and the bare path
+is always scanned first followed by each variant in the order you listed them.
+Variants that collide with another path already in the run are de-duplicated, so
+no path is fired twice.
+
+`--extensions` only applies to `--paths-file` entries — appending an extension to
+the curated database's absolute paths (`/etc/passwd.php`) is nonsense, so passing
+`--extensions` without `--paths-file` is a hard error. A malformed extension (one
+containing whitespace or a path separator, or a bare `.`) is rejected before any
+request fires.
+
 ### Filtering response-size noise (`--filter-size`)
 
 Many web apps return a *fixed-size* "file not found" page (a soft-404 template, a
