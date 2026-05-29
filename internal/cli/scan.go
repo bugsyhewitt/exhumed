@@ -23,6 +23,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/scanstate"
 	"github.com/bugsyhewitt/exhumed/internal/timefilter"
 	"github.com/bugsyhewitt/exhumed/internal/traversal"
+	"github.com/bugsyhewitt/exhumed/internal/wordfilter"
 	"github.com/spf13/cobra"
 )
 
@@ -56,6 +57,7 @@ type scanFlags struct {
 	filterCode      string
 	filterRegex     string
 	filterTime      string
+	filterWords     string
 	matchRegex      string
 	matchCode       string
 
@@ -86,6 +88,16 @@ type scanFlags struct {
 	// with sizeFilter, codeFilter, and bodyFilter (a response is dropped if any
 	// of the four matches) and never affects confirmed hits.
 	timeFilter *timefilter.Filter
+
+	// wordFilter is the compiled form of filterWords, populated by runScan.
+	// It suppresses unconfirmed "[responded]" lines whose response body contains
+	// a known-noise number of whitespace-separated words, mirroring the ffuf -fw
+	// workflow. It is the word-count companion to sizeFilter: where a soft-404
+	// embeds a varying token (request ID, timestamp) its byte length wobbles and
+	// --filter-size misses it, but the word count stays constant. It composes
+	// with the other suppression filters (a response is dropped if any matches)
+	// and never affects confirmed hits.
+	wordFilter *wordfilter.Filter
 
 	// matchFilter is the compiled form of matchRegex, populated by runScan.
 	// It is the positive twin of bodyFilter: when active, an unconfirmed
@@ -155,6 +167,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.filterCode, "filter-code", "", "Suppress unconfirmed responses whose HTTP status matches a noise code. Comma-separated exact codes and/or ranges (100-599), e.g. '404,403,400-499'. Composes with --filter-size; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterRegex, "filter-regex", "", "Suppress unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'Not Found' or '(?i)access denied'. Composes with --filter-size and --filter-code; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterTime, "filter-time", "", "Suppress unconfirmed responses whose round-trip time matches a comparator bound. Comma-separated terms of '>'/'>='/'<'/'<=' plus a Go duration, e.g. '>500ms' or '>2s,<5ms'. Composes with the other --filter-* flags; confirmed hits are never filtered.")
+	cmd.Flags().StringVar(&f.filterWords, "filter-words", "", "Suppress unconfirmed responses whose body word count matches a noise count (ffuf -fw workflow). Comma-separated exact counts and/or ranges, e.g. '0,42,10-20'. Catches dynamic-length soft-404s that --filter-size misses. Composes with the other --filter-* flags; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.matchRegex, "match-regex", "", "Keep only unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'password' or '(?i)secret|api[_-]?key' (ffuf -mr workflow). The match gate runs before the --filter-* suppressors. Confirmed hits are always reported regardless.")
 	cmd.Flags().StringVar(&f.matchCode, "match-code", "", "Keep only unconfirmed responses whose HTTP status matches this allowlist. Comma-separated exact codes and/or ranges (100-599), e.g. '200,500' or '500-599' (ffuf -mc workflow). The match gates run before the --filter-* suppressors; composes with --match-regex (both must pass). Confirmed hits are always reported regardless.")
 
@@ -195,6 +208,10 @@ func runScan(f scanFlags) error {
 		return err
 	}
 	f.timeFilter, err = timefilter.Parse(f.filterTime)
+	if err != nil {
+		return err
+	}
+	f.wordFilter, err = wordfilter.Parse(f.filterWords)
 	if err != nil {
 		return err
 	}
@@ -498,9 +515,10 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// positive keep-gates, applied first as a conjunction), --filter-size flags
 		// this body length as known noise, --filter-code flags this status code as
 		// known noise, --filter-regex matches this body's content as known noise,
-		// or --filter-time flags this round-trip duration as known noise. Confirmed
+		// --filter-time flags this round-trip duration as known noise, or
+		// --filter-words flags this body's word count as known noise. Confirmed
 		// hits (handled above) are never affected by any of these gates.
-		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) {
+		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
