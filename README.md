@@ -503,6 +503,45 @@ Like the other gates, `--match-time` only governs the *unconfirmed* stream —
 responded**. An empty spec keeps everything (no-op); a missing comparator, bad
 duration, or negative threshold is a hard error before any request fires.
 
+### Keeping only interesting response word counts (`--match-words`)
+
+`--match-words` is the word-count sibling of
+`--match-regex`/`--match-code`/`--match-size`/`--match-time` and the *positive*
+twin of `--filter-words`: instead of naming the noise word count, name the signal
+count. An unconfirmed response is kept **only** if its body word count is in the
+allowlist, and every other response is dropped. This is the classic `ffuf -mw`
+(match-words) workflow, the inverse of `--filter-words` (`ffuf -fw`). The spec
+grammar matches `--match-size` exactly — comma-separated exact counts and/or
+inclusive ranges:
+
+```bash
+# Keep only bodies whose word count lands where leaked file content does,
+# dropping the uniform soft-404 noise
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-words 200-9000
+
+# Keep an empty include (0 words) OR a specific leaked-content count
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-words 0,317
+```
+
+`--match-words` is the word-count companion to `--match-size`: many soft-404 /
+WAF templates embed a varying token — a request ID, a timestamp, a CSRF nonce —
+so the body's *byte length* wobbles per request and `--match-size` cannot pin the
+interesting body, but the *word count* stays constant because only one token's
+content changes, not the token count. Word count is defined exactly as `ffuf`
+defines it (whitespace-separated runs); the empty body counts as zero words. All
+five positive match gates **compose as a conjunction**: with `--match-words`,
+`--match-time`, `--match-size`, `--match-code`, and `--match-regex` active, an
+unconfirmed response is kept only if its word count is allowlisted **and** its
+round-trip time satisfies a bound **and** its body length is allowlisted **and**
+its status is allowlisted **and** its body matches the regex. The match gates run
+**before** the `--filter-*` suppressors, which then prune residual noise from the
+kept set. Like the other gates, `--match-words` only governs the *unconfirmed*
+stream — **confirmed hits are always reported regardless of their word count**.
+An empty spec keeps everything (no-op); a non-numeric, negative, or reversed-range
+term is a hard error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash

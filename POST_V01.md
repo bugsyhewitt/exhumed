@@ -173,7 +173,25 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23); ~~positive word-count matcher (`--match-words` / `ffuf -mw`)~~ ✅ shipped (r24). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+
+> **Positive word-count matcher (`--match-words`) — shipped on branch
+> `worker-r24-exhumed`:** the `ffuf -mw` member of the positive keep-gate family,
+> completing the quad alongside `--match-size`, `--match-time`, and `--match-regex`
+> (and `--match-code`). New `internal/matchwords` package parses a comma-separated
+> exact-count/range spec (same grammar as `matchsize`'s `--match-size`) and KEEPS
+> an unconfirmed `[responded]` line only if its body word count is in the
+> allowlist — the inverse polarity of `--filter-words`. Word count reuses
+> `wordfilter.CountWords` (`strings.Fields` semantics) so the keep-gate and the
+> suppressor share one definition. Motivation: it is the word-count companion to
+> `--match-size` — when a soft-404 embeds a varying token (request ID, timestamp,
+> CSRF nonce) the body's byte length wobbles and `--match-size` cannot pin the
+> interesting body, but the word count stays constant. The five positive match
+> gates (`--match-regex`/`--match-code`/`--match-size`/`--match-time`/`--match-words`)
+> compose as a conjunction and run before the five `--filter-*` suppressors;
+> confirmed (content-based) hits are never affected. Exposed via
+> `scan --match-words 0,200-9000`. Pure-Go (stdlib only), no new dependencies, no
+> type-contract changes, default off (purely additive).
 
 > **Positive time matcher (`--match-time`) — shipped on branch
 > `worker-r23-exhumed`:** the `ffuf -mt` member of the positive keep-gate family,
