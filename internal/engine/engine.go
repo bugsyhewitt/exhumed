@@ -50,6 +50,13 @@ type Config struct {
 	MaxBodySize int64
 	ProxyURL    string
 	Insecure    bool
+	// FollowRedirects controls whether 3xx responses are transparently
+	// followed. When false (the default), the engine returns the redirect
+	// response verbatim — the original 3xx status and Location header are
+	// preserved instead of being masked by the redirect target's response.
+	// Not following redirects is the correct default for a fuzzer: a 302 to a
+	// login page must not be reported as the login page's 200.
+	FollowRedirects bool
 }
 
 // Engine dispatches requests concurrently.
@@ -87,11 +94,22 @@ func New(cfg Config) *Engine {
 		lim = rate.NewLimiter(rate.Limit(cfg.RatePerSec), 1)
 	}
 
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   cfg.Timeout,
+	}
+	// By default, do not follow redirects: a fuzzer must observe the original
+	// 3xx status and Location header, not the redirect target's response.
+	// Returning http.ErrUseLastResponse makes Client.Do hand back the 3xx
+	// response verbatim without error.
+	if !cfg.FollowRedirects {
+		client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
+
 	e := &Engine{
-		client: &http.Client{
-			Transport: transport,
-			Timeout:   cfg.Timeout,
-		},
+		client:  client,
 		limiter: lim,
 		cfg:     cfg,
 	}

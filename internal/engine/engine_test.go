@@ -182,6 +182,83 @@ func TestEngine_ConcurrentRequests(t *testing.T) {
 	}
 }
 
+// redirectMux builds a server whose "/redirect" path issues a 302 to "/login",
+// where "/login" serves a 200 with a marker body. It records how many times the
+// target landing page was actually fetched.
+func redirectMux(landingHits *int) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/login", http.StatusFound)
+	})
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		*landingHits++
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "login page body")
+	})
+	return mux
+}
+
+func TestEngine_NoFollowRedirects_Default(t *testing.T) {
+	landingHits := 0
+	base, stop := startTestServer(t, redirectMux(&landingHits))
+	defer stop()
+
+	// Default config: FollowRedirects is false.
+	eng := New(Config{
+		Concurrency: 1,
+		Timeout:     5 * time.Second,
+	})
+
+	reqs := []Request{{Method: "GET", URL: base + "/redirect"}}
+	results := eng.Run(context.Background(), reqs)
+
+	r := results[0]
+	if r.Err != nil {
+		t.Fatalf("unexpected error: %v", r.Err)
+	}
+	if r.StatusCode != http.StatusFound {
+		t.Errorf("status: got %d, want %d (the 302 should be returned verbatim)", r.StatusCode, http.StatusFound)
+	}
+	if loc := r.Headers.Get("Location"); loc != "/login" {
+		t.Errorf("Location header: got %q, want %q", loc, "/login")
+	}
+	if landingHits != 0 {
+		t.Errorf("redirect target should not be fetched: got %d landing hits, want 0", landingHits)
+	}
+	if string(r.Body) == "login page body" {
+		t.Error("body should be the redirect's body, not the login page's")
+	}
+}
+
+func TestEngine_FollowRedirects_Enabled(t *testing.T) {
+	landingHits := 0
+	base, stop := startTestServer(t, redirectMux(&landingHits))
+	defer stop()
+
+	eng := New(Config{
+		Concurrency:     1,
+		Timeout:         5 * time.Second,
+		FollowRedirects: true,
+	})
+
+	reqs := []Request{{Method: "GET", URL: base + "/redirect"}}
+	results := eng.Run(context.Background(), reqs)
+
+	r := results[0]
+	if r.Err != nil {
+		t.Fatalf("unexpected error: %v", r.Err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("status: got %d, want %d (redirect should have been followed)", r.StatusCode, http.StatusOK)
+	}
+	if landingHits != 1 {
+		t.Errorf("redirect target should be fetched once: got %d landing hits, want 1", landingHits)
+	}
+	if string(r.Body) != "login page body" {
+		t.Errorf("body: got %q, want %q", r.Body, "login page body")
+	}
+}
+
 func TestEngine_BodyCap(t *testing.T) {
 	const bodySize = 1024
 

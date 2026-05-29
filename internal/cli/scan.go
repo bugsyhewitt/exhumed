@@ -23,29 +23,30 @@ import (
 
 // scanFlags holds the parsed flag values for the scan command.
 type scanFlags struct {
-	url            string
-	marker         string
-	method         string
-	data           string
-	headers        []string
-	cookies        []string
-	concurrency    int
-	rate           float64
-	timeout        time.Duration
-	proxy          string
-	insecure       bool
-	traversalDepth int
-	techniques     []string
-	verbose        bool
-	dbPath         string
-	onlyHits       bool
-	showSecrets    bool
-	maxDepth       int
-	maxTargets     int
-	outputFormat   string
-	resume         string
-	pathsFile      string
-	filterSize     string
+	url             string
+	marker          string
+	method          string
+	data            string
+	headers         []string
+	cookies         []string
+	concurrency     int
+	rate            float64
+	timeout         time.Duration
+	proxy           string
+	insecure        bool
+	followRedirects bool
+	traversalDepth  int
+	techniques      []string
+	verbose         bool
+	dbPath          string
+	onlyHits        bool
+	showSecrets     bool
+	maxDepth        int
+	maxTargets      int
+	outputFormat    string
+	resume          string
+	pathsFile       string
+	filterSize      string
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -86,6 +87,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().DurationVar(&f.timeout, "timeout", 10*time.Second, "Per-request timeout")
 	cmd.Flags().StringVar(&f.proxy, "proxy", "", "HTTP proxy URL (e.g. http://127.0.0.1:8080)")
 	cmd.Flags().BoolVar(&f.insecure, "insecure", false, "Skip TLS certificate verification")
+	cmd.Flags().BoolVar(&f.followRedirects, "follow-redirects", false, "Follow 3xx redirects (default: report the redirect verbatim without following)")
 	cmd.Flags().IntVar(&f.traversalDepth, "traversal-depth", 8, "Max directory traversal depth")
 	cmd.Flags().StringSliceVar(&f.techniques, "techniques", nil, "Comma-separated traversal techniques to use (default: all). Use 'list' to print available names.")
 	cmd.Flags().BoolVarP(&f.verbose, "verbose", "v", false, "Verbose output")
@@ -242,11 +244,12 @@ func runScan(f scanFlags) error {
 	}
 
 	eng := engine.New(engine.Config{
-		Concurrency: f.concurrency,
-		RatePerSec:  f.rate,
-		Timeout:     f.timeout,
-		ProxyURL:    f.proxy,
-		Insecure:    f.insecure,
+		Concurrency:     f.concurrency,
+		RatePerSec:      f.rate,
+		Timeout:         f.timeout,
+		ProxyURL:        f.proxy,
+		Insecure:        f.insecure,
+		FollowRedirects: f.followRedirects,
 	})
 
 	ctx := context.Background()
