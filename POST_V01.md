@@ -173,7 +173,22 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+
+> **Word-count noise filter (`--filter-words`) — shipped on branch
+> `worker-r21-exhumed`:** the `ffuf -fw` member of the noise-suppression family,
+> completing it alongside `--filter-size` (r14), `--filter-code` (r15),
+> `--filter-regex` (r16), and `--filter-time` (r20). New `internal/wordfilter`
+> package parses a comma-separated exact-count/range spec (same grammar as
+> `respfilter`/`codefilter`) and suppresses an unconfirmed `[responded]` line
+> whose body word count (Go `strings.Fields`, exactly ffuf's definition) matches.
+> Its motivation over `--filter-size`: a soft-404 that stamps a per-request
+> varying token (request ID, timestamp, nonce) has a wobbling byte length that a
+> fixed `--filter-size` misses, but a constant word count — `--filter-words`
+> catches it. Exposed via `scan --filter-words 0,42,10-20`; composes with the
+> other four `--filter-*` flags (drop if any matches) and never touches confirmed
+> hits. Pure-Go (stdlib only), no new dependencies, no type-contract changes,
+> default off (purely additive).
 
 > **SecLists interop — shipped on branch `worker-r12-exhumed`:** new
 > `internal/pathlist` package parses SecLists-style wordlists (one path per line,

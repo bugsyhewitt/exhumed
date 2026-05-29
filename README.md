@@ -339,15 +339,46 @@ exhumed scan --url "http://target.local/?file=FUZZ" \
 
 A bare number with no comparator is rejected — timing filters are directional, so
 you must say which side is noise. `--filter-time` composes with `--filter-size`,
-`--filter-code`, and `--filter-regex`: a response is suppressed if *any* of the
-four matches it. Like the others, it only quiets *unconfirmed* noise.
+`--filter-code`, `--filter-regex`, and `--filter-words`: a response is suppressed
+if *any* of them matches it. Like the others, it only quiets *unconfirmed* noise.
 **Confirmed hits are never filtered:** a real file surfaces regardless of how fast
 or slow it responded. A malformed spec (missing comparator, bad duration, or a
 negative threshold) is a hard error before any request fires.
 
+### Filtering response-word-count noise (`--filter-words`)
+
+Byte-size filtering is brittle when the soft-404 / WAF block page embeds a
+per-request *varying* token — a request ID, a timestamp, a CSRF nonce, a cache
+buster. The body length then wobbles by a few bytes on every request, so a fixed
+`--filter-size` misses most of the noise. The *word count*, though, stays
+constant across those variants: only the content of one token changes, not the
+token count. `--filter-words` is the word-count companion to `--filter-size` —
+the classic `ffuf -fw` workflow. Name the word count(s) of the known noise and
+exhumed drops responses with exactly that many whitespace-separated words:
+
+```bash
+# The "file not found" page is always 42 words even though its byte length
+# drifts (it stamps a request ID) — pin it by word count, not size
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-words 42
+
+# Comma-separated exact counts and/or inclusive ranges
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-words 0,42,10-20
+```
+
+Word count is defined exactly as `ffuf` and Go's `strings.Fields` define it: the
+number of maximal runs of non-whitespace characters (an empty body is zero
+words). `--filter-words` composes with `--filter-size`, `--filter-code`,
+`--filter-regex`, and `--filter-time`: a response is suppressed if *any* of the
+five matches it. Like the others, it only quiets *unconfirmed* noise.
+**Confirmed hits are never filtered:** a real file surfaces regardless of its
+word count. A malformed spec (non-numeric, negative, or a reversed range) is a
+hard error before any request fires.
+
 ### Keeping only interesting responses (`--match-regex`)
 
-The four `--filter-*` flags above are *negative* — they say what to throw away.
+The five `--filter-*` flags above are *negative* — they say what to throw away.
 `--match-regex` is their *positive* twin: it says what to keep. Instead of naming
 the noise, name the signal — a single Go (RE2) regex; an unconfirmed response is
 kept **only** if its body matches, and every non-matching response is dropped.
