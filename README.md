@@ -227,6 +227,35 @@ block), so a real file surfaces regardless of its size, even if that size is in
 your `--filter-size` spec. A malformed spec (non-numeric, negative, or a reversed
 range like `200-100`) is a hard error before any request fires.
 
+### Filtering response-status noise (`--filter-code`)
+
+Some apps don't return a fixed-size miss page but a *fixed status code*: a hard
+`404` for every non-existent file, a WAF `403`, a `500` from a crashing include
+sink, or a `302` redirect to a login page. `--filter-code` is the status-code
+companion to `--filter-size` — the classic `ffuf -fc` / `feroxbuster
+--filter-status` workflow. Name the HTTP status code(s) of the known noise and
+exhumed drops responses with exactly those codes from the `[responded]` stream.
+The spec is comma-separated and accepts both exact codes and inclusive ranges
+(valid codes are `100`–`599`):
+
+```bash
+# Drop the 404 miss noise and the WAF 403s
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-code 404,403
+
+# Drop every 4xx, plus the login-redirect 302
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-code 302,400-499
+```
+
+`--filter-code` composes with `--filter-size`: a response is suppressed if
+*either* filter matches it, so you can quiet both a soft-404's size and a hard
+404's status in one scan. Like `--filter-size`, it only quiets *unconfirmed*
+noise. **Confirmed hits are never filtered:** confirmation is content-based and
+requires a `2xx` read, so a real file surfaces regardless of any code you list.
+A malformed spec (non-numeric, out of the `100`–`599` range, or a reversed range
+like `499-400`) is a hard error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
