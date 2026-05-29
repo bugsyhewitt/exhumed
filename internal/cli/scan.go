@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bugsyhewitt/exhumed/internal/chain"
+	"github.com/bugsyhewitt/exhumed/internal/codefilter"
 	"github.com/bugsyhewitt/exhumed/internal/db"
 	"github.com/bugsyhewitt/exhumed/internal/detect"
 	"github.com/bugsyhewitt/exhumed/internal/engine"
@@ -47,12 +48,20 @@ type scanFlags struct {
 	resume          string
 	pathsFile       string
 	filterSize      string
+	filterCode      string
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
 	// a known-noise size, mirroring the ffuf/gobuster -fs workflow. It never
 	// affects confirmed hits.
 	sizeFilter *respfilter.Filter
+
+	// codeFilter is the compiled form of filterCode, populated by runScan.
+	// It suppresses unconfirmed "[responded]" lines whose status code matches
+	// a known-noise code, mirroring the ffuf -fc workflow. It composes with
+	// sizeFilter (a response is dropped if either matches) and never affects
+	// confirmed hits.
+	codeFilter *codefilter.Filter
 }
 
 func newScanCmd() *cobra.Command {
@@ -100,6 +109,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.resume, "resume", "", "Persist per-entry progress to this file and skip already-attempted entries on restart")
 	cmd.Flags().StringVar(&f.pathsFile, "paths-file", "", "Scan additional file paths from a SecLists-style wordlist (one path per line; '#' comments and blanks ignored)")
 	cmd.Flags().StringVar(&f.filterSize, "filter-size", "", "Suppress unconfirmed responses whose body length matches a noise size. Comma-separated exact sizes and/or ranges, e.g. '0,413,100-200'. Confirmed hits are never filtered.")
+	cmd.Flags().StringVar(&f.filterCode, "filter-code", "", "Suppress unconfirmed responses whose HTTP status matches a noise code. Comma-separated exact codes and/or ranges (100-599), e.g. '404,403,400-499'. Composes with --filter-size; confirmed hits are never filtered.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -123,9 +133,13 @@ func runScan(f scanFlags) error {
 		return err
 	}
 
-	// Compile the response-size noise filter up front so a malformed spec
-	// fails before any requests fire.
+	// Compile the response-noise filters up front so a malformed spec fails
+	// before any requests fire.
 	f.sizeFilter, err = respfilter.Parse(f.filterSize)
+	if err != nil {
+		return err
+	}
+	f.codeFilter, err = codefilter.Parse(f.filterCode)
 	if err != nil {
 		return err
 	}
@@ -396,10 +410,11 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 				elapsed:   r.Elapsed,
 			}, len(results)
 		}
-		// Unconfirmed response: emit unless --only-hits silences everything or
-		// --filter-size flags this body length as known noise. Confirmed hits
-		// (handled above) are never affected by either gate.
-		if !f.onlyHits && !f.sizeFilter.Match(len(r.Body)) {
+		// Unconfirmed response: emit unless --only-hits silences everything,
+		// --filter-size flags this body length as known noise, or --filter-code
+		// flags this status code as known noise. Confirmed hits (handled above)
+		// are never affected by any of these gates.
+		if !f.onlyHits && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
