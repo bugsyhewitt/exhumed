@@ -175,6 +175,42 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 
 **All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23); ~~positive word-count matcher (`--match-words` / `ffuf -mw`)~~ ✅ shipped (r24); ~~line-count noise filter (`--filter-lines` / `ffuf -fl`)~~ ✅ shipped (r25); ~~response-header matcher (`--match-headers`)~~ ✅ shipped (r26). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
 
+> **HTML-title matcher (`--match-title`) — shipped on branch
+> `worker-r30-exhumed`:** the HTML-`<title>` member of the positive keep-gate
+> family, a title-surface complement to `--match-regex` (which scans the raw
+> body and so fires on the wrong fragment when a soft-404 embeds the searched
+> term in its chrome — nav bar, footer, generic error template, an echoed
+> query string). New `internal/matchtitle` package extracts the first
+> `<title>...</title>` element from the response body (case-insensitive on
+> the tag name, tolerant of attributes; first-wins; the unanchored RE2 spec
+> runs against entity-decoded, whitespace-collapsed title text mirroring how
+> a browser renders the title bar) and KEEPS an unconfirmed `[responded]`
+> line only if **every** supplied regex matches the extracted title. A body
+> that is not HTML, a body with no closed `<title>` element, or a body
+> truncated before the closing tag never satisfies an active matcher (an
+> active matcher drops it). Motivation: many LFI targets are HTML-rendered
+> web apps whose chrome wraps either a real file read (title shifts: `Index
+> of /etc`, `passwd`) or a uniform error page (title constant: `404 Not
+> Found`, `403 Forbidden`, `Access Denied`). Pinning the keep-gate to the
+> title removes the cross-fragment false positives a whole-body
+> `--match-regex` produces. There is no `ffuf` equivalent — its matchers are
+> body/status/size/word/line oriented. Multiple regexes compose as a
+> conjunction and the whole title gate composes with the other eight match
+> gates (still a conjunction) ahead of the `--filter-*` suppressors;
+> content-confirmed hits are never affected. Exposed via `scan --match-title
+> '(?i)index of'`. Pure-Go (stdlib `regexp`/`strings`/`fmt` only), no new
+> dependencies, no type-contract changes, default off (purely additive).
+>
+> **Verification before implementation:** read CHANGELOG (none present) and
+> grepped the full tree for `match-title`, `filter-lines-range`, `MatchTitle`,
+> `FilterLinesRange`. Neither flag existed; further, `--filter-lines` already
+> accepts the `low-high` range grammar (`internal/linefilter`'s `Parse`
+> handles e.g. `0,5,10-20`, verified by
+> `TestScan_FilterLinesRangeSuppresses`), so a separate `--filter-lines-range`
+> would be a redundant rename of the existing capability. Per the dispatch
+> instruction the alternative was rejected and the unshipped positive title
+> matcher implemented instead.
+>
 > **Structured JSON body matcher (`--match-body-json`) — shipped on branch
 > `worker-r28-exhumed`:** the structured-**JSON** member of the positive keep-gate
 > family, the JSON-aware complement to `--match-regex`. New

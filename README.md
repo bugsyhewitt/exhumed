@@ -789,6 +789,70 @@ empty spec keeps everything (no-op); a rule missing its colon, with an empty pat
 or path segment, or with an unparsable regex is a hard error before any request
 fires.
 
+### Keeping only interesting HTML titles (`--match-title`)
+
+`--match-title` is the **HTML `<title>`** sibling of `--match-regex`. Where
+`--match-regex` runs an unanchored "contains" match against the *raw body bytes*
+— and so fires whenever the searched term appears anywhere in a soft-404's
+chrome (navigation bar, footer, generic error template, an echoed query
+string) — `--match-title` extracts the first `<title>...</title>` element from
+the body and matches the operator's regex against the **decoded title text
+only**. This matters because many LFI targets are HTML-rendered web apps whose
+chrome wraps either a real file (whose title shifts: `"Index of /etc"`,
+`"passwd"`) or a uniform error page (whose title is constant: `"404 Not
+Found"`, `"403 Forbidden"`, `"Access Denied"`). Pinning the keep-gate to the
+title removes the cross-fragment false positives a whole-body `--match-regex`
+produces.
+
+The flag is **repeatable**; each value is one Go (RE2) regex applied as an
+unanchored "contains" match against the extracted title. The extractor finds
+the first `<title>...</title>` pair (case-insensitive on the tag name,
+tolerant of attributes), decodes the four common named entities (`&amp;`,
+`&lt;`, `&gt;`, `&quot;`) and any decimal or hex numeric character reference,
+and collapses runs of whitespace to a single space (mirroring how a browser
+renders the title bar):
+
+```bash
+# Keep only responses whose HTML title looks like a directory listing
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-title '(?i)index of'
+
+# Keep only titles naming a sensitive file
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-title '(?i)passwd|shadow|hosts'
+
+# Keep only titles starting with a real-looking path
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-title '^/etc/'
+```
+
+A body that is **not HTML**, a body with no closed `<title>` element, or a
+body truncated before the closing tag yields no title — an active matcher
+drops it.
+
+When more than one regex is supplied they **compose as a conjunction** —
+every regex must match the same extracted title. This extends the family's
+conjunction semantics to the title surface: with `--match-title` and the
+other match gates active, an unconfirmed response is kept only if every title
+rule matches **and** every other match gate passes:
+
+```bash
+# Both must match the SAME title
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-title '(?i)index of' \
+             --match-title '/etc'
+```
+
+There is no `ffuf` flag for HTML-title matching — its matchers are
+body/status/size/word/line oriented and have no HTML-structural matcher — so
+`--match-title` is the title-surface complement that rounds out the family
+for the HTML-rendered LFI use case. The match gates run **before** the
+`--filter-*` suppressors, which then prune residual noise from the kept set.
+Like the other gates, `--match-title` only governs the *unconfirmed* stream —
+**confirmed hits are always reported regardless of their title** (or lack of
+one). An empty spec keeps everything (no-op); an unparsable regex is a hard
+error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash

@@ -24,6 +24,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/matchlines"
 	"github.com/bugsyhewitt/exhumed/internal/matchsize"
 	"github.com/bugsyhewitt/exhumed/internal/matchtime"
+	"github.com/bugsyhewitt/exhumed/internal/matchtitle"
 	"github.com/bugsyhewitt/exhumed/internal/matchwords"
 	"github.com/bugsyhewitt/exhumed/internal/output"
 	"github.com/bugsyhewitt/exhumed/internal/pathlist"
@@ -76,6 +77,7 @@ type scanFlags struct {
 	matchLines      string
 	matchHeaders    []string
 	matchBodyJSON   []string
+	matchTitle      []string
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -233,6 +235,25 @@ type scanFlags struct {
 	// match gate must pass before the suppression filters run); an inactive
 	// headerMatcher keeps everything. Confirmed hits are never affected.
 	headerMatcher *matchheaders.Filter
+
+	// titleMatcher is the compiled form of matchTitle, populated by runScan.
+	// It is the HTML-<title> sibling of matchFilter/codeMatcher/sizeMatcher/
+	// timeMatcher/wordMatcher/lineMatcher/headerMatcher/bodyJSONMatcher and
+	// inspects a surface none of them touch: the contents of the response's
+	// HTML <title> element. Where --match-regex inspects the raw body and can
+	// fire on a search term embedded in the noise template's chrome (nav bar,
+	// footer, generic error text), --match-title pins the keep-gate to one
+	// semantically meaningful field of an HTML response, so a real file read
+	// rendered inside an "Index of /etc" / "passwd" chrome survives while the
+	// uniform "404 Not Found" / "Access denied" noise is dropped. When active,
+	// an unconfirmed "[responded]" line is KEPT only if EVERY supplied regex
+	// matches the extracted title (entity-decoded, whitespace-collapsed). A
+	// body with no extractable <title> never satisfies an active matcher and
+	// is dropped. It composes with the other match gates as a conjunction
+	// (every match gate must pass before the suppression filters run); an
+	// inactive titleMatcher keeps everything. Confirmed hits are never
+	// affected.
+	titleMatcher *matchtitle.Filter
 }
 
 func newScanCmd() *cobra.Command {
@@ -295,6 +316,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.matchLines, "match-lines", "", "Keep only unconfirmed responses whose body line count matches this allowlist (ffuf -ml workflow). Comma-separated exact counts and/or ranges, e.g. '0,5' or '10-20'. Line count is the number of newlines. The line-count twin of --match-size/--match-words: catches the interesting body when a varying multi-word fragment on a fixed line (an echoed query string, a 'Request: GET /…' line) makes both the byte length and the word count unstable while the line count stays constant. The match gates run before the --filter-* suppressors; composes with --match-regex, --match-code, --match-size, --match-time and --match-words (all must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringArrayVar(&f.matchHeaders, "match-headers", nil, "Keep only unconfirmed responses whose RESPONSE headers match. Repeatable; each value is one 'Header-Name: regex' rule (RE2 'contains' match on the header value, case-insensitive header name), e.g. --match-headers 'Content-Type: text/(plain|x-php)' --match-headers 'Content-Disposition: attachment'. Multiple rules compose as a conjunction (all must match). Inspects a surface no other matcher touches — a sniffed Content-Type, an attachment disposition, or a changed X-Powered-By banner often distinguishes a real file read from soft-404 noise whose body, size, words, and status are identical. The match gates run before the --filter-* suppressors; composes with --match-regex, --match-code, --match-size, --match-time and --match-words (all must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringArrayVar(&f.matchBodyJSON, "match-body-json", nil, "Keep only unconfirmed responses whose decoded JSON body matches at a named path. Repeatable; each value is one 'json.path: regex' rule (dot-separated path with array indices; RE2 'contains' match on the scalar value's string form), e.g. --match-body-json 'ok: true' --match-body-json 'data.path: ^/(etc|home)/' --match-body-json 'results.0.name: passwd'. Multiple rules compose as a conjunction (all must match). Unlike --match-regex, which scans the raw body bytes, this walks the parsed JSON to one field — pinning the match to e.g. the 'content' field of a JSON-API envelope and dropping the '{\"ok\":false,\"error\":...}' soft-404 whose body length, word count, status, and headers are otherwise identical, without the cross-field false positives a whole-body regex produces. A non-JSON body, an absent path, or a path landing on an object/array never matches. Escape a literal dot in a key as '\\.'. The match gates run before the --filter-* suppressors; composes with the other --match-* gates (all must pass). Confirmed hits are always reported regardless.")
+	cmd.Flags().StringArrayVar(&f.matchTitle, "match-title", nil, "Keep only unconfirmed responses whose HTML <title> matches. Repeatable; each value is one Go (RE2) regex applied as an unanchored 'contains' match against the extracted title (entity-decoded, whitespace-collapsed), e.g. --match-title '(?i)index of' --match-title '(?i)passwd|shadow|hosts'. Multiple rules compose as a conjunction (all must match). Unlike --match-regex, which scans the raw body bytes and can fire on a term embedded in a soft-404's chrome (nav bar, footer, generic error text), --match-title pins the keep-gate to one semantically meaningful field of an HTML response — the document title — so a real file read rendered inside an 'Index of /etc' / 'passwd' chrome survives while the uniform 'Not Found' / 'Access denied' noise (whose title is constant even when body length, word count, status, and headers wobble) is dropped. A non-HTML body, a body with no closed <title> element, or a truncated body never matches. The match gates run before the --filter-* suppressors; composes with the other --match-* gates (all must pass). Confirmed hits are always reported regardless.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -377,6 +399,10 @@ func runScan(f scanFlags) error {
 		return err
 	}
 	f.bodyJSONMatcher, err = matchbodyjson.Parse(f.matchBodyJSON)
+	if err != nil {
+		return err
+	}
+	f.titleMatcher, err = matchtitle.Parse(f.matchTitle)
 	if err != nil {
 		return err
 	}
@@ -675,8 +701,10 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// in the allowlist, --match-lines is active and this body's line count is
 		// NOT in the allowlist, --match-headers is active and this response's headers
 		// do NOT satisfy every require rule, --match-body-json is active and this
-		// response's decoded JSON does NOT satisfy every json.path require rule (the
-		// eight positive keep-gates, applied first as a conjunction), --filter-size
+		// response's decoded JSON does NOT satisfy every json.path require rule,
+		// --match-title is active and the title extracted from this body does NOT
+		// satisfy every require regex (the nine positive keep-gates, applied first
+		// as a conjunction), --filter-size
 		// flags this body length as known noise,
 		// --filter-code flags this status code as known noise, --filter-regex
 		// matches this body's content as known noise, --filter-time flags this
@@ -685,7 +713,7 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// as known noise, or --filter-headers flags this response's header block as
 		// known noise. Confirmed hits (handled above) are never affected by any of
 		// these gates.
-		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.lineMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && f.bodyJSONMatcher.Keep(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) {
+		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.lineMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && f.bodyJSONMatcher.Keep(r.Body) && f.titleMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
