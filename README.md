@@ -468,6 +468,41 @@ Like the other gates, `--match-size` only governs the *unconfirmed* stream —
 spec keeps everything (no-op); a non-numeric, negative, or reversed spec is a
 hard error before any request fires.
 
+### Keeping only interesting response times (`--match-time`)
+
+`--match-time` is the response-time sibling of
+`--match-regex`/`--match-code`/`--match-size` and the *positive* twin of
+`--filter-time`: instead of naming the noise latency band, name the signal band.
+An unconfirmed response is kept **only** if its round-trip time satisfies a
+comparator bound, and every other response is dropped. This is the classic
+`ffuf -mt` (match-time) workflow, the inverse of `--filter-time` (`ffuf -ft`). The
+spec grammar matches `--filter-time` exactly — comma-separated `>`/`>=`/`<`/`<=`
+comparators plus a Go duration literal:
+
+```bash
+# Keep only the slow minority: a genuine include() touches disk and is
+# measurably slower than the uniform sub-millisecond cache/WAF soft-404
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-time '>50ms'
+
+# Keep the very slow OR the very fast, dropping the uniform middle band
+# (any bound satisfied keeps the response)
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-time '>1s,<5ms'
+```
+
+A bare number with no comparator is rejected — timing gates are directional, so
+you must say which side is interesting. All four positive match gates **compose
+as a conjunction**: with `--match-time`, `--match-size`, `--match-code`, and
+`--match-regex` active, an unconfirmed response is kept only if its round-trip
+time satisfies a bound **and** its body length is allowlisted **and** its status
+is allowlisted **and** its body matches the regex. The match gates run **before**
+the `--filter-*` suppressors, which then prune residual noise from the kept set.
+Like the other gates, `--match-time` only governs the *unconfirmed* stream —
+**confirmed hits are always reported regardless of how fast or slow they
+responded**. An empty spec keeps everything (no-op); a missing comparator, bad
+duration, or negative threshold is a hard error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash

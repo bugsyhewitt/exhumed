@@ -173,7 +173,24 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+
+> **Positive time matcher (`--match-time`) — shipped on branch
+> `worker-r23-exhumed`:** the `ffuf -mt` member of the positive keep-gate family,
+> joining `--match-regex`, `--match-code`, and `--match-size` (all shipped
+> earlier). New `internal/matchtime` package parses a comma-separated
+> comparator-bound spec (same grammar as `timefilter`'s `--filter-time`:
+> `>`/`>=`/`<`/`<=` plus a Go duration) and KEEPS an unconfirmed `[responded]`
+> line only if its round-trip time satisfies ANY bound — the inverse polarity of
+> `--filter-time`. Motivation: a genuine `include()` touches disk and is
+> measurably slower than the uniform sub-millisecond cache/WAF soft-404, so rather
+> than enumerating noise latency with `--filter-time` the operator names the
+> signal band worth keeping (e.g. `>50ms`). The four positive match gates
+> (`--match-regex`/`--match-code`/`--match-size`/`--match-time`) compose as a
+> conjunction and run before the five `--filter-*` suppressors; confirmed
+> (content-based) hits are never affected. Exposed via `scan --match-time '>50ms'`.
+> Pure-Go (stdlib only), no new dependencies, no type-contract changes, default
+> off (purely additive).
 
 > **Positive size matcher (`--match-size`) — shipped on branch
 > `worker-r22-exhumed`:** the `ffuf -ms` member of the positive keep-gate family,
