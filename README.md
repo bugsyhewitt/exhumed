@@ -286,6 +286,37 @@ confirmation is content-based and requires a `2xx` read, so a real file surfaces
 regardless of any pattern you supply. A malformed regex is a hard error before any
 request fires.
 
+### Filtering response-time noise (`--filter-time`)
+
+Sometimes the noise has neither a fixed size, status, nor phrase — but it *is*
+distinguishable by timing. A reverse-proxy or WAF returns its uniform block /
+soft-404 page from cache almost instantly, while a genuine file read touches disk
+and takes measurably longer; or a slow upstream times out near the deadline and
+floods output with uniformly slow non-hits. `--filter-time` is the round-trip-time
+companion to the other filters — the classic `ffuf -ft` workflow. Each term is a
+comparator (`>`, `>=`, `<`, `<=`) followed by a Go duration literal (`ns`, `us`,
+`ms`, `s`, `m`, `h`); an unconfirmed response is dropped if it satisfies *any*
+term:
+
+```bash
+# Drop the instant cache/WAF noise — keep only responses that took real work
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-time '>5ms'
+
+# Band-stop: suppress the very fast (<5ms) AND the very slow (>2s),
+# keeping the middle band where genuine reads land
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-time '<5ms,>2s'
+```
+
+A bare number with no comparator is rejected — timing filters are directional, so
+you must say which side is noise. `--filter-time` composes with `--filter-size`,
+`--filter-code`, and `--filter-regex`: a response is suppressed if *any* of the
+four matches it. Like the others, it only quiets *unconfirmed* noise.
+**Confirmed hits are never filtered:** a real file surfaces regardless of how fast
+or slow it responded. A malformed spec (missing comparator, bad duration, or a
+negative threshold) is a hard error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
