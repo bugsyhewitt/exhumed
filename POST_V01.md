@@ -173,8 +173,24 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23); ~~positive word-count matcher (`--match-words` / `ffuf -mw`)~~ ✅ shipped (r24). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23); ~~positive word-count matcher (`--match-words` / `ffuf -mw`)~~ ✅ shipped (r24); ~~line-count noise filter (`--filter-lines` / `ffuf -fl`)~~ ✅ shipped (r25). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
 
+> **Line-count noise filter (`--filter-lines`) — shipped on branch
+> `worker-r25-exhumed`:** the `ffuf -fl` member of the negative suppression
+> family, completing the trio alongside `--filter-size` (byte length) and
+> `--filter-words` (word count). New package `internal/linefilter` mirrors
+> `wordfilter` exactly (same exact-count/range grammar, same inactive-on-empty
+> contract, same hard-error on malformed specs) but counts newline (`\n`)
+> terminators — ffuf's "Lines" metric. Motivation over `--filter-words`: when a
+> soft-404 echoes a *multi-word* varying fragment on a fixed line (an echoed
+> query string, a `Request: GET /…` line) both the byte length and the word
+> count wobble per request, so `--filter-size` and `--filter-words` both miss it,
+> but the line count is constant. It composes with the other `--filter-*` flags
+> as a disjunction (a response is dropped if any matches), runs only on the
+> unconfirmed `[responded]` stream, and never touches content-confirmed hits.
+> Exposed via `scan --filter-lines 0,5,10-20`. Pure-Go (stdlib only,
+> `bytes.Count`), no new dependencies, no changes to v0.1 architecture.
+>
 > **Positive word-count matcher (`--match-words`) — shipped on branch
 > `worker-r24-exhumed`:** the `ffuf -mw` member of the positive keep-gate family,
 > completing the quad alongside `--match-size`, `--match-time`, and `--match-regex`

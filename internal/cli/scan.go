@@ -15,6 +15,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/engine"
 	"github.com/bugsyhewitt/exhumed/internal/extract"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
+	"github.com/bugsyhewitt/exhumed/internal/linefilter"
 	"github.com/bugsyhewitt/exhumed/internal/matchcode"
 	"github.com/bugsyhewitt/exhumed/internal/matchfilter"
 	"github.com/bugsyhewitt/exhumed/internal/matchsize"
@@ -61,6 +62,7 @@ type scanFlags struct {
 	filterRegex     string
 	filterTime      string
 	filterWords     string
+	filterLines     string
 	matchRegex      string
 	matchCode       string
 	matchSize       string
@@ -104,6 +106,17 @@ type scanFlags struct {
 	// with the other suppression filters (a response is dropped if any matches)
 	// and never affects confirmed hits.
 	wordFilter *wordfilter.Filter
+
+	// lineFilter is the compiled form of filterLines, populated by runScan.
+	// It suppresses unconfirmed "[responded]" lines whose response body contains
+	// a known-noise number of newline-separated lines, mirroring the ffuf -fl
+	// workflow. It is the line-count companion to wordFilter: where a soft-404
+	// embeds a varying multi-word fragment on a fixed line (an echoed query
+	// string, a "Request: GET /…" line) both its byte length and its word count
+	// wobble — so --filter-size and --filter-words miss it — but the line count
+	// stays constant. It composes with the other suppression filters (a response
+	// is dropped if any matches) and never affects confirmed hits.
+	lineFilter *linefilter.Filter
 
 	// matchFilter is the compiled form of matchRegex, populated by runScan.
 	// It is the positive twin of bodyFilter: when active, an unconfirmed
@@ -206,6 +219,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.filterRegex, "filter-regex", "", "Suppress unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'Not Found' or '(?i)access denied'. Composes with --filter-size and --filter-code; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterTime, "filter-time", "", "Suppress unconfirmed responses whose round-trip time matches a comparator bound. Comma-separated terms of '>'/'>='/'<'/'<=' plus a Go duration, e.g. '>500ms' or '>2s,<5ms'. Composes with the other --filter-* flags; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterWords, "filter-words", "", "Suppress unconfirmed responses whose body word count matches a noise count (ffuf -fw workflow). Comma-separated exact counts and/or ranges, e.g. '0,42,10-20'. Catches dynamic-length soft-404s that --filter-size misses. Composes with the other --filter-* flags; confirmed hits are never filtered.")
+	cmd.Flags().StringVar(&f.filterLines, "filter-lines", "", "Suppress unconfirmed responses whose body line count matches a noise count (ffuf -fl workflow). Comma-separated exact counts and/or ranges, e.g. '0,5,10-20'. Line count is the number of newlines. Catches soft-404s whose byte length and word count both wobble (a varying multi-word fragment on a fixed line) but whose line count is constant — noise that --filter-size and --filter-words miss. Composes with the other --filter-* flags; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.matchRegex, "match-regex", "", "Keep only unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'password' or '(?i)secret|api[_-]?key' (ffuf -mr workflow). The match gate runs before the --filter-* suppressors. Confirmed hits are always reported regardless.")
 	cmd.Flags().StringVar(&f.matchCode, "match-code", "", "Keep only unconfirmed responses whose HTTP status matches this allowlist. Comma-separated exact codes and/or ranges (100-599), e.g. '200,500' or '500-599' (ffuf -mc workflow). The match gates run before the --filter-* suppressors; composes with --match-regex (both must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringVar(&f.matchSize, "match-size", "", "Keep only unconfirmed responses whose body length matches this allowlist. Comma-separated exact sizes and/or ranges, e.g. '0,413' or '100-200' (ffuf -ms workflow). The match gates run before the --filter-* suppressors; composes with --match-regex and --match-code (all must pass). Confirmed hits are always reported regardless.")
@@ -253,6 +267,10 @@ func runScan(f scanFlags) error {
 		return err
 	}
 	f.wordFilter, err = wordfilter.Parse(f.filterWords)
+	if err != nil {
+		return err
+	}
+	f.lineFilter, err = linefilter.Parse(f.filterLines)
 	if err != nil {
 		return err
 	}
@@ -572,10 +590,11 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// conjunction), --filter-size flags this body length as known noise,
 		// --filter-code flags this status code as known noise, --filter-regex
 		// matches this body's content as known noise, --filter-time flags this
-		// round-trip duration as known noise, or --filter-words flags this body's
-		// word count as known noise. Confirmed hits (handled above) are never
-		// affected by any of these gates.
-		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) {
+		// round-trip duration as known noise, --filter-words flags this body's
+		// word count as known noise, or --filter-lines flags this body's line
+		// count as known noise. Confirmed hits (handled above) are never affected
+		// by any of these gates.
+		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
