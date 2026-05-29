@@ -187,6 +187,17 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 > type-contract changes, default off (purely additive). Combines with
 > `--techniques` to bound request volume on large lists.
 
+> **Response-body noise filtering (`--filter-regex`) — shipped on branch
+> `worker-r16-exhumed`:** new `internal/bodyfilter` package compiles a single Go
+> (RE2) regex spec and reports whether a response body should be suppressed via an
+> unanchored "contains" match. Exposed via a `scan --filter-regex <pattern>` flag,
+> completing the noise-suppression trio alongside `--filter-size` (r14) and
+> `--filter-code` (r15): a response is dropped if ANY of size/code/body-regex
+> matches, mirroring the `ffuf -fs`/`-fc`/`-fr` workflow. An empty spec is a no-op;
+> a malformed regex is a hard error before any request fires. Confirmed
+> (content-based) hits are never filtered. Pure-Go (stdlib `regexp`), no new
+> dependencies, no type-contract changes, default off (purely additive).
+
 > **WAF-evasion encodings — shipped on branch `worker-r11-exhumed`:** five new
 > WAF-bypass traversal techniques added to `internal/traversal` (`waf-double-slash`
 > mixed double-encoding, `waf-overlong-slash`, `waf-encoded-backslash`,

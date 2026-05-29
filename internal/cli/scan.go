@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bugsyhewitt/exhumed/internal/bodyfilter"
 	"github.com/bugsyhewitt/exhumed/internal/chain"
 	"github.com/bugsyhewitt/exhumed/internal/codefilter"
 	"github.com/bugsyhewitt/exhumed/internal/db"
@@ -49,6 +50,7 @@ type scanFlags struct {
 	pathsFile       string
 	filterSize      string
 	filterCode      string
+	filterRegex     string
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -62,6 +64,13 @@ type scanFlags struct {
 	// sizeFilter (a response is dropped if either matches) and never affects
 	// confirmed hits.
 	codeFilter *codefilter.Filter
+
+	// bodyFilter is the compiled form of filterRegex, populated by runScan.
+	// It suppresses unconfirmed "[responded]" lines whose response body matches
+	// a known-noise regex, mirroring the ffuf -fr workflow. It composes with
+	// sizeFilter and codeFilter (a response is dropped if any of the three
+	// matches) and never affects confirmed hits.
+	bodyFilter *bodyfilter.Filter
 }
 
 func newScanCmd() *cobra.Command {
@@ -110,6 +119,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.pathsFile, "paths-file", "", "Scan additional file paths from a SecLists-style wordlist (one path per line; '#' comments and blanks ignored)")
 	cmd.Flags().StringVar(&f.filterSize, "filter-size", "", "Suppress unconfirmed responses whose body length matches a noise size. Comma-separated exact sizes and/or ranges, e.g. '0,413,100-200'. Confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterCode, "filter-code", "", "Suppress unconfirmed responses whose HTTP status matches a noise code. Comma-separated exact codes and/or ranges (100-599), e.g. '404,403,400-499'. Composes with --filter-size; confirmed hits are never filtered.")
+	cmd.Flags().StringVar(&f.filterRegex, "filter-regex", "", "Suppress unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'Not Found' or '(?i)access denied'. Composes with --filter-size and --filter-code; confirmed hits are never filtered.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -140,6 +150,10 @@ func runScan(f scanFlags) error {
 		return err
 	}
 	f.codeFilter, err = codefilter.Parse(f.filterCode)
+	if err != nil {
+		return err
+	}
+	f.bodyFilter, err = bodyfilter.Parse(f.filterRegex)
 	if err != nil {
 		return err
 	}
@@ -411,10 +425,11 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 			}, len(results)
 		}
 		// Unconfirmed response: emit unless --only-hits silences everything,
-		// --filter-size flags this body length as known noise, or --filter-code
-		// flags this status code as known noise. Confirmed hits (handled above)
-		// are never affected by any of these gates.
-		if !f.onlyHits && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) {
+		// --filter-size flags this body length as known noise, --filter-code
+		// flags this status code as known noise, or --filter-regex matches this
+		// body's content as known noise. Confirmed hits (handled above) are
+		// never affected by any of these gates.
+		if !f.onlyHits && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}

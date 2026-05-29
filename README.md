@@ -256,6 +256,36 @@ requires a `2xx` read, so a real file surfaces regardless of any code you list.
 A malformed spec (non-numeric, out of the `100`–`599` range, or a reversed range
 like `499-400`) is a hard error before any request fires.
 
+### Filtering response-body noise (`--filter-regex`)
+
+The trickiest miss pages share neither a fixed size nor a fixed status: a soft-404
+HTML template whose length wobbles with the requested path, a framework error
+page served with a `200`, or a WAF challenge — all of which slip past
+`--filter-size` and `--filter-code` but share a recognisable *phrase*.
+`--filter-regex` is the body-content companion to those two — the classic
+`ffuf -fr` (filter-regex) workflow. Give it a single Go (RE2) regex; any
+unconfirmed response whose body matches is dropped from the `[responded]` stream.
+The match is an unanchored "contains" match, so a bare phrase is enough (use `^`
+and `$` to anchor to the whole body):
+
+```bash
+# Drop every response whose body contains the soft-404 banner
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-regex 'Not Found'
+
+# Case-insensitive WAF challenge page
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --filter-regex '(?i)access denied'
+```
+
+`--filter-regex` composes with `--filter-size` and `--filter-code`: a response is
+suppressed if *any* of the three matches it, so you can quiet a soft-404 by phrase,
+a hard 404 by status, and a fixed error page by size in one scan. Like the others,
+it only quiets *unconfirmed* noise. **Confirmed hits are never filtered:**
+confirmation is content-based and requires a `2xx` read, so a real file surfaces
+regardless of any pattern you supply. A malformed regex is a hard error before any
+request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
