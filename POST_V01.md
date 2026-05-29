@@ -175,6 +175,36 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 
 **All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18); ~~word-count noise filter (`--filter-words` / `ffuf -fw`)~~ ✅ shipped (r21); ~~positive size matcher (`--match-size` / `ffuf -ms`)~~ ✅ shipped (r22); ~~positive time matcher (`--match-time` / `ffuf -mt`)~~ ✅ shipped (r23); ~~positive word-count matcher (`--match-words` / `ffuf -mw`)~~ ✅ shipped (r24); ~~line-count noise filter (`--filter-lines` / `ffuf -fl`)~~ ✅ shipped (r25); ~~response-header matcher (`--match-headers`)~~ ✅ shipped (r26). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
 
+> **Structured JSON body matcher (`--match-body-json`) — shipped on branch
+> `worker-r28-exhumed`:** the structured-**JSON** member of the positive keep-gate
+> family, the JSON-aware complement to `--match-regex`. New
+> `internal/matchbodyjson` package parses a *repeatable* `json.path: regex` spec
+> (mirroring `--match-headers`'s repeatable `Name: regex` model): the path before
+> the colon is dot-separated (object keys and/or non-negative array indices, with
+> backslash-escaping for literal dots in keys), and an unconfirmed `[responded]`
+> line is KEPT only if **every** rule resolves to a *scalar* at its path **and**
+> that scalar's string form (strings verbatim; bools `true`/`false`; numbers via
+> `strconv.FormatFloat` 'g' so integers render `200` not `200.0`; JSON `null` as
+> `null`) matches the rule's RE2 regex. Motivation: modern LFI targets are
+> frequently JSON APIs whose file-content envelope (`{"ok":true,"content":"…"}`)
+> and soft-404 (`{"ok":false,"error":"…"}`) share a byte-identical shape that
+> `--match-size`/`--match-words` cannot separate, while a whole-body `--match-regex`
+> fires on the wrong field; pinning the match to one JSON path removes the
+> cross-field false positives. A non-JSON body, an absent path, or a path landing
+> on an object/array never satisfies a rule (an active matcher drops it). Multiple
+> rules compose as a conjunction and the whole JSON gate composes with the other
+> six match gates (still a conjunction) ahead of the `--filter-*` suppressors;
+> content-confirmed hits are never affected. Exposed via `scan --match-body-json
+> 'data.path: ^/etc/'`. Pure-Go (stdlib `encoding/json`/`regexp`/`strconv` only),
+> no new dependencies, no type-contract changes, default off (purely additive).
+>
+> **Verification before implementation:** grepped the full tree for
+> `match-body`/`match-json`/`MatchBody`/`MatchJSON`/`body-json` — no structured
+> JSON matcher existed. The dispatch brief's alternative, a `--filter-body-regex`
+> body-regex suppressor, was confirmed ALREADY shipped as `--filter-regex`
+> (`worker-r16-exhumed`, `internal/bodyfilter`), so per the brief's instruction the
+> JSON matcher was implemented instead.
+>
 > **Response-header matcher (`--match-headers`) — shipped on branch
 > `worker-r26-exhumed`:** the response-**header** member of the positive
 > keep-gate family, extending it to a surface none of the prior matchers

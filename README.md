@@ -680,6 +680,72 @@ empty spec keeps everything (no-op); a rule missing its colon, with an empty
 header name, or with an unparsable regex is a hard error before any request
 fires.
 
+### Keeping only interesting JSON bodies (`--match-body-json`)
+
+`--match-body-json` is the **structured-JSON** sibling of `--match-regex`. Where
+`--match-regex` runs an unanchored "contains" match against the *raw body bytes*,
+`--match-body-json` parses the response as JSON and matches a regex against the
+scalar value found at a **named path**. This matters because modern LFI targets
+are frequently JSON APIs, not HTML pages: a vulnerable endpoint that wraps file
+content in a JSON envelope (`{"ok":true,"content":"...file bytes..."}`) returns a
+soft-404 as the **same envelope shape** with a different field value
+(`{"ok":false,"error":"not found"}`). Those two responses can be byte-identical
+to `--match-size` and word-count-brittle to `--match-words`, while a raw
+`--match-regex` on the whole body is noisy — a regex meant for the `content`
+field also fires if the same token appears in an `error` message or an echoed
+request field. `--match-body-json` pins the match to **one field**, so the
+cross-field false positives disappear.
+
+The flag is **repeatable**; each value is one `json.path: regex` rule. The path
+before the colon is **dot-separated**: each segment is an object key or a
+non-negative array index. The value side is a Go (RE2) "contains" match against
+the scalar value's string form — strings verbatim, booleans as `true`/`false`,
+numbers naturally (`200`, `1.5`), and JSON `null` as the literal `null`. A rule
+is satisfied when the path resolves to a **scalar** **and** the regex matches its
+string form:
+
+```bash
+# Keep only responses whose JSON success flag is true
+exhumed scan --url "http://target.local/api?file=FUZZ" \
+             --match-body-json 'ok: true'
+
+# Keep only responses whose nested data.path field looks like a real unix path
+exhumed scan --url "http://target.local/api?file=FUZZ" \
+             --match-body-json 'data.path: ^/(etc|home|var)/'
+
+# Index into a JSON array: keep only responses whose first result is named passwd
+exhumed scan --url "http://target.local/api?file=FUZZ" \
+             --match-body-json 'results.0.name: passwd'
+```
+
+A body that is **not valid JSON**, a path that does **not exist**, or a path that
+lands on an **object or array** (not a scalar) never satisfies a rule — an active
+matcher drops it. If an object key itself contains a literal dot, escape it with a
+backslash (`a\.b` is the single key `a.b`, not the two-segment path `a` → `b`).
+
+When more than one rule is supplied they **compose as a conjunction** — every
+rule must match. This extends the family's conjunction semantics to the JSON
+surface: with `--match-body-json` and the other match gates active, an unconfirmed
+response is kept only if every JSON rule resolves and matches **and** every other
+match gate passes:
+
+```bash
+# Both must match: a true success flag AND an /etc/ path in the data envelope
+exhumed scan --url "http://target.local/api?file=FUZZ" \
+             --match-body-json 'ok: true' \
+             --match-body-json 'data.path: ^/etc/'
+```
+
+There is no `ffuf` flag for structured JSON matching — its matchers treat the
+body as opaque text — so `--match-body-json` is the JSON-surface complement that
+rounds out the family for the JSON-API LFI use case. The match gates run
+**before** the `--filter-*` suppressors, which then prune residual noise from the
+kept set. Like the other gates, `--match-body-json` only governs the *unconfirmed*
+stream — **confirmed hits are always reported regardless of their JSON shape**. An
+empty spec keeps everything (no-op); a rule missing its colon, with an empty path
+or path segment, or with an unparsable regex is a hard error before any request
+fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash

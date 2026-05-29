@@ -17,6 +17,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/headerfilter"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
 	"github.com/bugsyhewitt/exhumed/internal/linefilter"
+	"github.com/bugsyhewitt/exhumed/internal/matchbodyjson"
 	"github.com/bugsyhewitt/exhumed/internal/matchcode"
 	"github.com/bugsyhewitt/exhumed/internal/matchfilter"
 	"github.com/bugsyhewitt/exhumed/internal/matchheaders"
@@ -72,6 +73,7 @@ type scanFlags struct {
 	matchTime       string
 	matchWords      string
 	matchHeaders    []string
+	matchBodyJSON   []string
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -187,6 +189,22 @@ type scanFlags struct {
 	// inactive wordMatcher keeps everything. Confirmed hits are never affected.
 	wordMatcher *matchwords.Filter
 
+	// bodyJSONMatcher is the compiled form of matchBodyJSON, populated by runScan.
+	// It is the structured-JSON sibling of matchFilter/--match-regex and inspects a
+	// surface the raw-text matchers treat as opaque bytes: the DECODED JSON body.
+	// When active, an unconfirmed "[responded]" line is KEPT only if EVERY supplied
+	// "json.path: regex" rule is satisfied (the path resolves to a scalar in the
+	// decoded body and its string form matches), letting the operator pin a match to
+	// one field of a JSON-API envelope — keep `{"ok":true,...}` and drop the
+	// `{"ok":false,"error":...}` soft-404 whose body length, word count, status, and
+	// headers are otherwise identical, without the cross-field false positives a raw
+	// --match-regex on the whole body produces. A body that is not valid JSON never
+	// satisfies an active matcher and is dropped. It composes with the other match
+	// gates as a conjunction (every match gate must pass before the suppression
+	// filters run); an inactive bodyJSONMatcher keeps everything. Confirmed hits are
+	// never affected.
+	bodyJSONMatcher *matchbodyjson.Filter
+
 	// headerMatcher is the compiled form of matchHeaders, populated by runScan.
 	// It is the response-header sibling of matchFilter/codeMatcher/sizeMatcher/
 	// timeMatcher/wordMatcher and inspects a surface none of them touch: the
@@ -260,6 +278,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.matchTime, "match-time", "", "Keep only unconfirmed responses whose round-trip time satisfies a comparator bound (ffuf -mt workflow). Comma-separated terms of '>'/'>='/'<'/'<=' plus a Go duration, e.g. '>50ms' or '>1s,<5ms'. Keeps the slow minority a real disk read produces and drops the uniform fast noise. The match gates run before the --filter-* suppressors; composes with --match-regex, --match-code and --match-size (all must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringVar(&f.matchWords, "match-words", "", "Keep only unconfirmed responses whose body word count matches this allowlist (ffuf -mw workflow). Comma-separated exact counts and/or ranges, e.g. '0,42' or '10-20'. The word-count twin of --match-size: catches the interesting body when a varying token makes its byte length unstable. The match gates run before the --filter-* suppressors; composes with --match-regex, --match-code, --match-size and --match-time (all must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringArrayVar(&f.matchHeaders, "match-headers", nil, "Keep only unconfirmed responses whose RESPONSE headers match. Repeatable; each value is one 'Header-Name: regex' rule (RE2 'contains' match on the header value, case-insensitive header name), e.g. --match-headers 'Content-Type: text/(plain|x-php)' --match-headers 'Content-Disposition: attachment'. Multiple rules compose as a conjunction (all must match). Inspects a surface no other matcher touches — a sniffed Content-Type, an attachment disposition, or a changed X-Powered-By banner often distinguishes a real file read from soft-404 noise whose body, size, words, and status are identical. The match gates run before the --filter-* suppressors; composes with --match-regex, --match-code, --match-size, --match-time and --match-words (all must pass). Confirmed hits are always reported regardless.")
+	cmd.Flags().StringArrayVar(&f.matchBodyJSON, "match-body-json", nil, "Keep only unconfirmed responses whose decoded JSON body matches at a named path. Repeatable; each value is one 'json.path: regex' rule (dot-separated path with array indices; RE2 'contains' match on the scalar value's string form), e.g. --match-body-json 'ok: true' --match-body-json 'data.path: ^/(etc|home)/' --match-body-json 'results.0.name: passwd'. Multiple rules compose as a conjunction (all must match). Unlike --match-regex, which scans the raw body bytes, this walks the parsed JSON to one field — pinning the match to e.g. the 'content' field of a JSON-API envelope and dropping the '{\"ok\":false,\"error\":...}' soft-404 whose body length, word count, status, and headers are otherwise identical, without the cross-field false positives a whole-body regex produces. A non-JSON body, an absent path, or a path landing on an object/array never matches. Escape a literal dot in a key as '\\.'. The match gates run before the --filter-* suppressors; composes with the other --match-* gates (all must pass). Confirmed hits are always reported regardless.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -334,6 +353,10 @@ func runScan(f scanFlags) error {
 		return err
 	}
 	f.headerMatcher, err = matchheaders.Parse(f.matchHeaders)
+	if err != nil {
+		return err
+	}
+	f.bodyJSONMatcher, err = matchbodyjson.Parse(f.matchBodyJSON)
 	if err != nil {
 		return err
 	}
@@ -630,8 +653,10 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// --match-time is active and this round-trip duration does NOT satisfy a
 		// require-bound, --match-words is active and this body's word count is NOT
 		// in the allowlist, --match-headers is active and this response's headers
-		// do NOT satisfy every require rule (the six positive keep-gates, applied
-		// first as a conjunction), --filter-size flags this body length as known noise,
+		// do NOT satisfy every require rule, --match-body-json is active and this
+		// response's decoded JSON does NOT satisfy every json.path require rule (the
+		// seven positive keep-gates, applied first as a conjunction), --filter-size
+		// flags this body length as known noise,
 		// --filter-code flags this status code as known noise, --filter-regex
 		// matches this body's content as known noise, --filter-time flags this
 		// round-trip duration as known noise, --filter-words flags this body's
@@ -639,7 +664,7 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// as known noise, or --filter-headers flags this response's header block as
 		// known noise. Confirmed hits (handled above) are never affected by any of
 		// these gates.
-		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) {
+		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && f.bodyJSONMatcher.Keep(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
