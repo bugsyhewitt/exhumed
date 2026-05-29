@@ -377,6 +377,35 @@ they match** — a real file read surfaces even if its body doesn't mention your
 recon pattern. An empty spec keeps everything (no-op); a malformed regex is a hard
 error before any request fires.
 
+### Keeping only interesting status codes (`--match-code`)
+
+`--match-code` is the status-code sibling of `--match-regex` and the *positive*
+twin of `--filter-code`: instead of naming the noise code, name the signal code.
+An unconfirmed response is kept **only** if its HTTP status is in the allowlist,
+and every other status is dropped. This is the classic `ffuf -mc` (match-code)
+workflow, the inverse of `--filter-code` (`ffuf -fc`). The spec grammar matches
+`--filter-code` exactly — comma-separated exact codes and/or inclusive ranges in
+`100`–`599`:
+
+```bash
+# Keep only responses where the include() sink crashed (5xx) — a strong LFI tell
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-code 500-599
+
+# Keep only 200s and 500s, dropping the uniform 404/403 noise
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --match-code 200,500
+```
+
+The two positive match gates **compose as a conjunction**: with both
+`--match-code` and `--match-regex` active, an unconfirmed response is kept only if
+its status is allowlisted **and** its body matches the regex. Both gates run
+**before** the `--filter-*` suppressors, which then prune residual noise from the
+kept set. Like the other gates, `--match-code` only governs the *unconfirmed*
+stream — **confirmed hits are always reported regardless of their status code**.
+An empty spec keeps everything (no-op); a non-numeric, out-of-range, or reversed
+spec is a hard error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
