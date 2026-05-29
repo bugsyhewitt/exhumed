@@ -49,6 +49,7 @@ type scanFlags struct {
 	outputFormat    string
 	resume          string
 	pathsFile       string
+	extensions      []string
 	filterSize      string
 	filterCode      string
 	filterRegex     string
@@ -127,6 +128,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text or json")
 	cmd.Flags().StringVar(&f.resume, "resume", "", "Persist per-entry progress to this file and skip already-attempted entries on restart")
 	cmd.Flags().StringVar(&f.pathsFile, "paths-file", "", "Scan additional file paths from a SecLists-style wordlist (one path per line; '#' comments and blanks ignored)")
+	cmd.Flags().StringSliceVar(&f.extensions, "extensions", nil, "Append file extensions to each --paths-file entry (ffuf -e workflow), e.g. '.php,.bak,.old'. A leading dot is optional. Requires --paths-file.")
 	cmd.Flags().StringVar(&f.filterSize, "filter-size", "", "Suppress unconfirmed responses whose body length matches a noise size. Comma-separated exact sizes and/or ranges, e.g. '0,413,100-200'. Confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterCode, "filter-code", "", "Suppress unconfirmed responses whose HTTP status matches a noise code. Comma-separated exact codes and/or ranges (100-599), e.g. '404,403,400-499'. Composes with --filter-size; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterRegex, "filter-regex", "", "Suppress unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'Not Found' or '(?i)access denied'. Composes with --filter-size and --filter-code; confirmed hits are never filtered.")
@@ -198,6 +200,20 @@ func runScan(f scanFlags) error {
 		}
 	}
 
+	// --extensions only makes sense for wordlist paths (a bare filename like
+	// "config" plus ".php"); appending extensions to the curated database's
+	// absolute paths (e.g. "/etc/passwd.php") is nonsense. Require --paths-file
+	// and validate the spec up front so a malformed extension fails before any
+	// request fires.
+	if len(f.extensions) > 0 {
+		if f.pathsFile == "" {
+			return fmt.Errorf("--extensions requires --paths-file (extensions are appended to wordlist entries)")
+		}
+		if _, err := pathlist.NormalizeExtensions(f.extensions); err != nil {
+			return err
+		}
+	}
+
 	// Resolve --db: prefer the freshest available source. When --db is left at
 	// its default, an up-to-date feed cache transparently overrides the bundled
 	// database so `exhumed update` actually takes effect.
@@ -224,12 +240,17 @@ func runScan(f scanFlags) error {
 	// traversal engine. This is purely additive: the curated database always
 	// runs first, the wordlist extends its coverage.
 	if f.pathsFile != "" {
-		wordlistEntries, err := pathlist.ParseFile(f.pathsFile)
+		wordlistEntries, err := pathlist.ParseFileWithExtensions(f.pathsFile, f.extensions)
 		if err != nil {
 			return err
 		}
 		if f.verbose && outFmt == output.FormatText {
-			fmt.Fprintf(os.Stderr, "[*] Loaded %d paths from wordlist %q\n", len(wordlistEntries), f.pathsFile)
+			if len(f.extensions) > 0 {
+				fmt.Fprintf(os.Stderr, "[*] Loaded %d paths from wordlist %q (with %d appended extension(s))\n",
+					len(wordlistEntries), f.pathsFile, len(f.extensions))
+			} else {
+				fmt.Fprintf(os.Stderr, "[*] Loaded %d paths from wordlist %q\n", len(wordlistEntries), f.pathsFile)
+			}
 		}
 		entries = append(entries, wordlistEntries...)
 	}

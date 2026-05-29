@@ -173,7 +173,7 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 6. **Item 5** (php filter chains) — high-value escalation, needs a careful dedicated lap. ✅
 7. **Item 7** (OOB/blind) — biggest capability gap but largest surface; split into generator (r9) + self-contained listener (r10). ✅
 
-**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
+**All seven roadmap items are now shipped.** Next-lap candidates beyond this roadmap: wiring an optional `--oob` flag into `scan` to fire OOB payloads live during a scan and auto-tag matching listener callbacks; SMB/DNS listener support; ~~SecLists interop~~ ✅ shipped (r12); ~~WAF-evasion encodings~~ ✅ shipped (r11); ~~wordlist extension fan-out (`--extensions`)~~ ✅ shipped (r18). A fresh research lap should re-rank against the 2026 tooling landscape before dispatch.
 
 > **SecLists interop — shipped on branch `worker-r12-exhumed`:** new
 > `internal/pathlist` package parses SecLists-style wordlists (one path per line,
@@ -186,6 +186,22 @@ Blind LFI is a meaningful slice of real findings that exhumed currently *cannot*
 > silently scan the curated set only). Pure-Go, no new dependencies, no
 > type-contract changes, default off (purely additive). Combines with
 > `--techniques` to bound request volume on large lists.
+
+> **Wordlist extension fan-out (`--extensions`) — shipped on branch
+> `worker-r18-exhumed`:** the `ffuf -e` workflow for the `--paths-file` wordlist
+> feature. New `pathlist.NormalizeExtensions` canonicalises a comma-separated
+> extension list (optional leading dot, whitespace trimmed, case preserved,
+> de-duplicated; whitespace/separator/bare-`.` specs rejected) and
+> `pathlist.ParseWithExtensions`/`ParseFileWithExtensions` emit, per base path,
+> the bare path followed by one variant per extension in listed order, with
+> cross-path de-duplication so nothing is fired twice. Exposed via `scan
+> --extensions .php,.bak,.old`, which requires `--paths-file` (appending an
+> extension to the curated DB's absolute paths is nonsense — hard error otherwise)
+> and validates the spec before any request fires. Variant entries keep the
+> path-inferred parser hint, so `config.env` extracts as a config file. Pure-Go
+> (stdlib only), no new dependencies, no type-contract changes, default off
+> (purely additive); the original `Parse`/`ParseFile` remain as nil-extension
+> wrappers.
 
 > **Response-body noise filtering (`--filter-regex`) — shipped on branch
 > `worker-r16-exhumed`:** new `internal/bodyfilter` package compiles a single Go
