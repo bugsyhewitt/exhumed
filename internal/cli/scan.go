@@ -14,6 +14,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/detect"
 	"github.com/bugsyhewitt/exhumed/internal/engine"
 	"github.com/bugsyhewitt/exhumed/internal/extract"
+	"github.com/bugsyhewitt/exhumed/internal/filtertitle"
 	"github.com/bugsyhewitt/exhumed/internal/headerfilter"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
 	"github.com/bugsyhewitt/exhumed/internal/linefilter"
@@ -69,6 +70,7 @@ type scanFlags struct {
 	filterWords     string
 	filterLines     string
 	filterHeaders   []string
+	filterTitle     []string
 	matchRegex      string
 	matchCode       string
 	matchSize       string
@@ -142,6 +144,23 @@ type scanFlags struct {
 	// composes with the other suppression filters (a response is dropped if any
 	// matches) and never affects confirmed hits.
 	headerFilter *headerfilter.Filter
+
+	// titleFilter is the compiled form of filterTitle, populated by runScan.
+	// It suppresses unconfirmed "[responded]" lines whose extracted HTML
+	// <title> matches a known-noise regex. It is the negative twin of
+	// titleMatcher/--match-title and the title-surface companion to the other
+	// --filter-* suppressors: where a soft-404/WAF/403 page stamps a constant
+	// <title> ("404 Not Found", "Access denied", "Forbidden") that
+	// --filter-size/--filter-words/--filter-code/--filter-headers can't pin
+	// because the body length, word count, status, and header block all wobble,
+	// the title is stable and --filter-title drops it. Multiple regexes compose
+	// as a DISJUNCTION (a response is suppressed if ANY rule fires), mirroring
+	// the rest of the suppression family and inverting matchtitle's conjunction.
+	// A body with no extractable title never matches any rule and is therefore
+	// NOT suppressed — see internal/filtertitle for the rationale. It composes
+	// with the other suppression filters (a response is dropped if any matches)
+	// and never affects confirmed hits.
+	titleFilter *filtertitle.Filter
 
 	// matchFilter is the compiled form of matchRegex, populated by runScan.
 	// It is the positive twin of bodyFilter: when active, an unconfirmed
@@ -308,6 +327,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.filterWords, "filter-words", "", "Suppress unconfirmed responses whose body word count matches a noise count (ffuf -fw workflow). Comma-separated exact counts and/or ranges, e.g. '0,42,10-20'. Catches dynamic-length soft-404s that --filter-size misses. Composes with the other --filter-* flags; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterLines, "filter-lines", "", "Suppress unconfirmed responses whose body line count matches a noise count (ffuf -fl workflow). Comma-separated exact counts and/or ranges, e.g. '0,5,10-20'. Line count is the number of newlines. Catches soft-404s whose byte length and word count both wobble (a varying multi-word fragment on a fixed line) but whose line count is constant — noise that --filter-size and --filter-words miss. Composes with the other --filter-* flags; confirmed hits are never filtered.")
 	cmd.Flags().StringArrayVar(&f.filterHeaders, "filter-headers", nil, "Suppress unconfirmed responses whose RESPONSE headers match a noise signature. Repeatable; each value is one 'Header-Name: regex' rule (RE2 'contains' match on the header value, case-insensitive header name), e.g. --filter-headers 'Server: cloudflare' --filter-headers 'X-Cache: HIT'. Multiple rules compose as a disjunction (a response is dropped if ANY rule matches) — the negative twin of --match-headers. Drops soft-404/WAF/CDN noise whose header block is constant even when its body length, word count, and status wobble. Composes with the other --filter-* flags; confirmed hits are never filtered.")
+	cmd.Flags().StringArrayVar(&f.filterTitle, "filter-title", nil, "Suppress unconfirmed responses whose HTML <title> matches a noise signature. Repeatable; each value is one Go (RE2) regex applied as an unanchored 'contains' match against the extracted title (entity-decoded, whitespace-collapsed), e.g. --filter-title '404 Not Found' --filter-title '(?i)access denied|forbidden'. Multiple rules compose as a disjunction (a response is dropped if ANY rule matches) — the negative twin of --match-title. Drops soft-404/WAF/403 noise whose <title> is constant ('404 Not Found', 'Access denied', 'Forbidden') even when its body length, word count, status, and headers wobble. A body with no extractable <title> is NOT suppressed (a title suppressor cannot classify a titleless body as title-shaped noise). Composes with the other --filter-* flags; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.matchRegex, "match-regex", "", "Keep only unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'password' or '(?i)secret|api[_-]?key' (ffuf -mr workflow). The match gate runs before the --filter-* suppressors. Confirmed hits are always reported regardless.")
 	cmd.Flags().StringVar(&f.matchCode, "match-code", "", "Keep only unconfirmed responses whose HTTP status matches this allowlist. Comma-separated exact codes and/or ranges (100-599), e.g. '200,500' or '500-599' (ffuf -mc workflow). The match gates run before the --filter-* suppressors; composes with --match-regex (both must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringVar(&f.matchSize, "match-size", "", "Keep only unconfirmed responses whose body length matches this allowlist. Comma-separated exact sizes and/or ranges, e.g. '0,413' or '100-200' (ffuf -ms workflow). The match gates run before the --filter-* suppressors; composes with --match-regex and --match-code (all must pass). Confirmed hits are always reported regardless.")
@@ -367,6 +387,10 @@ func runScan(f scanFlags) error {
 		return err
 	}
 	f.headerFilter, err = headerfilter.Parse(f.filterHeaders)
+	if err != nil {
+		return err
+	}
+	f.titleFilter, err = filtertitle.Parse(f.filterTitle)
 	if err != nil {
 		return err
 	}
@@ -710,10 +734,11 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// matches this body's content as known noise, --filter-time flags this
 		// round-trip duration as known noise, --filter-words flags this body's
 		// word count as known noise, --filter-lines flags this body's line count
-		// as known noise, or --filter-headers flags this response's header block as
+		// as known noise, --filter-headers flags this response's header block as
+		// known noise, or --filter-title flags this response's HTML <title> as
 		// known noise. Confirmed hits (handled above) are never affected by any of
 		// these gates.
-		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.lineMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && f.bodyJSONMatcher.Keep(r.Body) && f.titleMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) {
+		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.lineMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && f.bodyJSONMatcher.Keep(r.Body) && f.titleMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) && !f.titleFilter.MatchBody(r.Body) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
