@@ -15,6 +15,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/engine"
 	"github.com/bugsyhewitt/exhumed/internal/extract"
 	"github.com/bugsyhewitt/exhumed/internal/inject"
+	"github.com/bugsyhewitt/exhumed/internal/matchfilter"
 	"github.com/bugsyhewitt/exhumed/internal/output"
 	"github.com/bugsyhewitt/exhumed/internal/pathlist"
 	"github.com/bugsyhewitt/exhumed/internal/respfilter"
@@ -54,6 +55,7 @@ type scanFlags struct {
 	filterCode      string
 	filterRegex     string
 	filterTime      string
+	matchRegex      string
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -82,6 +84,15 @@ type scanFlags struct {
 	// with sizeFilter, codeFilter, and bodyFilter (a response is dropped if any
 	// of the four matches) and never affects confirmed hits.
 	timeFilter *timefilter.Filter
+
+	// matchFilter is the compiled form of matchRegex, populated by runScan.
+	// It is the positive twin of bodyFilter: when active, an unconfirmed
+	// "[responded]" line is KEPT only if its body matches the require-regex,
+	// mirroring the ffuf -mr workflow. The match gate runs first (keep only
+	// interesting bodies); the suppression filters then prune residual noise
+	// from the kept set. An inactive matchFilter keeps everything. Confirmed
+	// hits are never affected.
+	matchFilter *matchfilter.Filter
 }
 
 func newScanCmd() *cobra.Command {
@@ -133,6 +144,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringVar(&f.filterCode, "filter-code", "", "Suppress unconfirmed responses whose HTTP status matches a noise code. Comma-separated exact codes and/or ranges (100-599), e.g. '404,403,400-499'. Composes with --filter-size; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterRegex, "filter-regex", "", "Suppress unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'Not Found' or '(?i)access denied'. Composes with --filter-size and --filter-code; confirmed hits are never filtered.")
 	cmd.Flags().StringVar(&f.filterTime, "filter-time", "", "Suppress unconfirmed responses whose round-trip time matches a comparator bound. Comma-separated terms of '>'/'>='/'<'/'<=' plus a Go duration, e.g. '>500ms' or '>2s,<5ms'. Composes with the other --filter-* flags; confirmed hits are never filtered.")
+	cmd.Flags().StringVar(&f.matchRegex, "match-regex", "", "Keep only unconfirmed responses whose body matches this regex (RE2, unanchored 'contains' match), e.g. 'password' or '(?i)secret|api[_-]?key' (ffuf -mr workflow). The match gate runs before the --filter-* suppressors. Confirmed hits are always reported regardless.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -171,6 +183,10 @@ func runScan(f scanFlags) error {
 		return err
 	}
 	f.timeFilter, err = timefilter.Parse(f.filterTime)
+	if err != nil {
+		return err
+	}
+	f.matchFilter, err = matchfilter.Parse(f.matchRegex)
 	if err != nil {
 		return err
 	}
@@ -461,12 +477,13 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 			}, len(results)
 		}
 		// Unconfirmed response: emit unless --only-hits silences everything,
-		// --filter-size flags this body length as known noise, --filter-code
-		// flags this status code as known noise, --filter-regex matches this
-		// body's content as known noise, or --filter-time flags this round-trip
-		// duration as known noise. Confirmed hits (handled above) are never
-		// affected by any of these gates.
-		if !f.onlyHits && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) {
+		// --match-regex is active and this body does NOT match the require-regex
+		// (positive keep-gate, applied first), --filter-size flags this body
+		// length as known noise, --filter-code flags this status code as known
+		// noise, --filter-regex matches this body's content as known noise, or
+		// --filter-time flags this round-trip duration as known noise. Confirmed
+		// hits (handled above) are never affected by any of these gates.
+		if !f.onlyHits && f.matchFilter.Keep(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}
