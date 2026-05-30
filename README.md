@@ -513,6 +513,79 @@ through the same `<title>404 Not Found</title>` template still reports). An
 empty spec keeps everything (no-op); an unparsable regex is a hard error
 before any request fires.
 
+### Filtering JSON body noise (`--filter-body-json`)
+
+`--filter-body-json` is the **structured-JSON** member of the suppression
+family — the negative twin of `--match-body-json`. Where `--filter-regex` runs
+an unanchored "contains" match against the *raw body bytes* and can fire on a
+noise token that happens to appear in a real read's content (or echo of a
+request field), `--filter-body-json` parses the response as JSON and matches a
+regex against the scalar value found at a **named path**. This matters because
+modern LFI targets are frequently JSON APIs whose soft-404 reply is the **same
+envelope shape** as a success (`{"ok":true,"content":"..."}` vs
+`{"ok":false,"error":"not found"}`). Those two responses are byte-identical to
+`--filter-size`, word-count-brittle to `--filter-words`, and a raw
+`--filter-regex` on the whole body produces cross-field false positives.
+`--filter-body-json` pins the suppressor to **one field**, so the structured
+noise drops cleanly without taking real reads with it.
+
+The flag is **repeatable**; each value is one `json.path: regex` rule,
+identical in grammar to `--match-body-json`. The path before the colon is
+**dot-separated**: each segment is an object key or a non-negative array
+index. The value side is a Go (RE2) "contains" match against the scalar
+value's string form — strings verbatim, booleans as `true`/`false`, numbers
+naturally (`200`, `1.5`), and JSON `null` as the literal `null`. A rule fires
+when the path resolves to a **scalar** **and** the regex matches its string
+form:
+
+```bash
+# Drop responses whose JSON success flag is false
+exhumed scan --url "http://target.local/api?file=FUZZ" \
+             --filter-body-json 'ok: false'
+
+# Drop the generic "not found" / "forbidden" error envelopes
+exhumed scan --url "http://target.local/api?file=FUZZ" \
+             --filter-body-json 'error: (?i)not found|forbidden'
+
+# Index into a JSON array: drop responses whose first result is a 404
+exhumed scan --url "http://target.local/api?file=FUZZ" \
+             --filter-body-json 'results.0.status: ^404$'
+```
+
+When more than one rule is supplied they compose as a **disjunction** — a
+response is suppressed if **any** rule fires — the deliberate opposite of
+`--match-body-json`'s conjunction. (For suppression you want "drop if it looks
+like *any* known-noise envelope"; for keeping you want "show only if it
+satisfies *every* signal requirement.")
+
+```bash
+# Drop a response if EITHER envelope shape fires
+exhumed scan --url "http://target.local/api?file=FUZZ" \
+             --filter-body-json 'ok: false' \
+             --filter-body-json 'error: (?i)not found'
+```
+
+A body that is **not valid JSON**, a body whose JSON does **not contain the
+named path**, or a path that lands on an **object or array** (not a scalar)
+never satisfies a rule and is therefore **not** suppressed — the operator
+opted in to a JSON suppressor, so a body that cannot be classified by it is
+left alone. (If you want to drop non-JSON bodies too, pair this with
+`--match-body-json` or another `--filter-*` gate.) If an object key itself
+contains a literal dot, escape it with a backslash (`a\.b` is the single key
+`a.b`, not the two-segment path `a` → `b`).
+
+There is no `ffuf` flag for structured JSON filtering — its filters treat the
+body as opaque text — so `--filter-body-json` is the JSON-surface complement
+that rounds out the suppression family for the JSON-API LFI use case.
+`--filter-body-json` composes with `--filter-size`, `--filter-code`,
+`--filter-regex`, `--filter-time`, `--filter-words`, `--filter-lines`,
+`--filter-headers`, and `--filter-title`: a response is suppressed if *any* of
+them matches it. Like the others, it only quiets *unconfirmed* noise.
+**Confirmed hits are never filtered:** a real file surfaces regardless of the
+JSON envelope its body would be wrapped in. An empty spec keeps everything
+(no-op); a rule missing its colon, with an empty path or path segment, or
+with an unparsable regex is a hard error before any request fires.
+
 ### Keeping only interesting responses (`--match-regex`)
 
 The seven `--filter-*` flags above are *negative* — they say what to throw away.

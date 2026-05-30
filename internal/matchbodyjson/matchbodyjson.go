@@ -121,7 +121,7 @@ func Parse(specs []string) (*Filter, error) {
 			return nil, fmt.Errorf("matchbodyjson: invalid spec %q: empty regex for path %q", spec, pathSpec)
 		}
 
-		segments, err := splitPath(pathSpec)
+		segments, err := SplitPath(pathSpec)
 		if err != nil {
 			return nil, fmt.Errorf("matchbodyjson: invalid path %q: %w", pathSpec, err)
 		}
@@ -136,11 +136,14 @@ func Parse(specs []string) (*Filter, error) {
 	return f, nil
 }
 
-// splitPath decodes a dot-separated JSON path into its segments, honouring
+// SplitPath decodes a dot-separated JSON path into its segments, honouring
 // backslash escaping so a literal dot inside an object key (`a\.b`) is one
 // segment and a literal backslash is written `\\`. An empty segment (a leading,
 // trailing, or doubled dot) is an error, as is a dangling escape.
-func splitPath(spec string) ([]string, error) {
+//
+// SplitPath is exported so the negative twin (filterbodyjson) can share the
+// exact same path grammar without duplicating the parser.
+func SplitPath(spec string) ([]string, error) {
 	var segments []string
 	var cur strings.Builder
 	escaped := false
@@ -208,21 +211,24 @@ func (f *Filter) Keep(body []byte) bool {
 // regex. A path that does not resolve, or that lands on an object or array,
 // never matches.
 func ruleMatches(rule pathRule, doc any) bool {
-	val, ok := resolve(doc, rule.segments)
+	val, ok := Resolve(doc, rule.segments)
 	if !ok {
 		return false
 	}
-	s, ok := scalarString(val)
+	s, ok := ScalarString(val)
 	if !ok {
 		return false
 	}
 	return rule.re.MatchString(s)
 }
 
-// resolve walks doc following segments. Object keys index map[string]any; a
+// Resolve walks doc following segments. Object keys index map[string]any; a
 // segment that is a non-negative integer indexes a []any. Returns the value at
 // the path and true, or (nil, false) if any segment cannot be followed.
-func resolve(doc any, segments []string) (any, bool) {
+//
+// Resolve is exported so the negative twin (filterbodyjson) can share the exact
+// same descent semantics without duplicating the walker.
+func Resolve(doc any, segments []string) (any, bool) {
 	cur := doc
 	for _, seg := range segments {
 		switch node := cur.(type) {
@@ -246,13 +252,16 @@ func resolve(doc any, segments []string) (any, bool) {
 	return cur, true
 }
 
-// scalarString renders a decoded JSON scalar to the string the regex matches
+// ScalarString renders a decoded JSON scalar to the string the regex matches
 // against. Strings are returned verbatim. Booleans become "true"/"false". null
 // becomes "null". Numbers (always float64 from encoding/json) are formatted with
 // strconv.FormatFloat 'g' so integers render without a trailing ".0" (e.g. 200
 // -> "200", 1.5 -> "1.5"). Objects and arrays are not scalars and return
 // ("", false) so a rule targeting a container never matches.
-func scalarString(v any) (string, bool) {
+//
+// ScalarString is exported so the negative twin (filterbodyjson) can share the
+// exact same stringification rules without duplicating them.
+func ScalarString(v any) (string, bool) {
 	switch t := v.(type) {
 	case string:
 		return t, true
