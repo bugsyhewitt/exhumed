@@ -85,6 +85,12 @@ exhumed scan --url "http://target.local/?file=FUZZ" \
              --traversal-depth 12 \
              --timeout 15s
 
+# Stay polite to each individual host while fanning out across many targets
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --concurrency 50 \
+             --rate 200 \
+             --rate-per-host 5
+
 # Verbose output (shows injection surface and payload preview)
 exhumed scan --url "http://target.local/?file=FUZZ" --verbose
 
@@ -170,6 +176,52 @@ exhumed scan --url "http://target.local/?file=FUZZ"
 # Follow redirects to the final response (up to Go's default redirect cap)
 exhumed scan --url "http://target.local/?file=FUZZ" --follow-redirects
 ```
+
+### Per-host rate limiting (`--rate-per-host`)
+
+`--rate` is a global ceiling across every request the engine sends. When the
+scan touches one target that's all you need: `--rate 50` is 50 req/s at that
+target. But the moment more than one host enters the picture — a chain
+follow-on that resolves to a separate origin, a wordlist whose entries
+include absolute URLs to a CDN, an out-of-band callback host, a future
+multi-target queue — a single global budget either over-throttles the scan
+(50 req/s split across 10 hosts is 5 req/s per host, leaving 90% of your
+budget unused) or under-protects each one (raise global to 500 and any
+single host can absorb the entire flood if the request distribution skews).
+
+`--rate-per-host` adds an independent per-host ceiling, keyed by URL
+`host:port`. It composes with `--rate`: a request must acquire a token from
+**both** limiters (if both are active) before being sent. The typical pattern
+is high global, low per-host:
+
+```bash
+# Fan out across many hosts at 200 req/s in aggregate, but never more than
+# 5 req/s at any one server.
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --concurrency 50 \
+             --rate 200 \
+             --rate-per-host 5
+```
+
+Behaviour and edge cases:
+
+- **Default is unlimited** (`0`). When unset, the engine is identical to
+  prior versions — there's no per-host throttling and no per-host machinery
+  is allocated.
+- **Per-host limiters are created lazily** on first request to each host.
+  A scan that only touches one host pays the cost of one limiter, not one
+  per host in the database.
+- **Single-target scans:** `--rate-per-host N` with one target behaves
+  the same as `--rate N` (the tighter of the two wins). Setting only
+  `--rate-per-host` on a single-target scan is equivalent to setting
+  `--rate`. The flag earns its keep when the request stream fans out.
+- **Composition:** at every request, the engine waits for the global token
+  (if `--rate > 0`) and then the per-host token (if `--rate-per-host > 0`).
+  Whichever cap is tighter at this instant is the one that actually
+  throttles. Use this to give yourself headroom (`--rate 500`) while
+  capping the per-host blast radius (`--rate-per-host 10`).
+- **Confirmed hits and replay** are not subject to either rate limit; the
+  `--replay-proxy` mirror runs out-of-band on its own client.
 
 ### Scanning a custom wordlist (SecLists interop)
 

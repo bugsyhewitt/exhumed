@@ -49,6 +49,7 @@ type scanFlags struct {
 	cookies         []string
 	concurrency     int
 	rate            float64
+	ratePerHost     float64
 	timeout         time.Duration
 	proxy           string
 	replayProxy     string
@@ -340,7 +341,8 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringArrayVarP(&f.headers, "header", "H", nil, "Extra header (repeatable): 'Name: value'")
 	cmd.Flags().StringArrayVarP(&f.cookies, "cookie", "b", nil, "Cookie (repeatable): 'name=value'")
 	cmd.Flags().IntVarP(&f.concurrency, "concurrency", "c", 10, "Number of concurrent workers")
-	cmd.Flags().Float64Var(&f.rate, "rate", 0, "Max requests/sec (0 = unlimited)")
+	cmd.Flags().Float64Var(&f.rate, "rate", 0, "Max requests/sec, global across all hosts (0 = unlimited)")
+	cmd.Flags().Float64Var(&f.ratePerHost, "rate-per-host", 0, "Max requests/sec to any single target host, keyed by URL host:port (0 = unlimited). Composes with --rate: a request must acquire a token from BOTH the global limiter and the per-host limiter before being sent. Use when fanning out across many targets (high --concurrency, high --rate) while staying polite to each individual host — e.g. --rate 200 --rate-per-host 5 lets the scan push 200 req/s in aggregate but never more than 5 req/s at any one server. With a single target host, --rate-per-host acts as a tighter cap on top of --rate; with one target, setting only --rate-per-host is equivalent to --rate. Per-host limiters are created lazily on first request to each host, so a scan that only touches one host pays no overhead for the per-host machinery.")
 	cmd.Flags().DurationVar(&f.timeout, "timeout", 10*time.Second, "Per-request timeout")
 	cmd.Flags().StringVar(&f.proxy, "proxy", "", "HTTP proxy URL (e.g. http://127.0.0.1:8080)")
 	cmd.Flags().StringVar(&f.replayProxy, "replay-proxy", "", "Replay every CONFIRMED hit's winning request through this proxy (e.g. http://127.0.0.1:8080) so Burp/ZAP/mitmproxy/Caido sees the exact bytes that worked and the operator can pick up manual exploitation from a populated HTTP history. Mirrors the ffuf -replay-proxy workflow: scan traffic stays on --proxy (or direct), only the confirmed-hit subset is mirrored to the replay proxy. Schemes: http, https, socks5, socks5h. Replay errors are logged when --verbose is set but NEVER fail the scan (the hit is already confirmed). Replay client is independent of --proxy on the scan path; it shares --insecure (skip TLS verification on the replay transport, useful for self-signed Burp/ZAP listeners) and --timeout (per-request cap).")
@@ -618,12 +620,13 @@ func runScan(f scanFlags) error {
 	}
 
 	eng := engine.New(engine.Config{
-		Concurrency:     f.concurrency,
-		RatePerSec:      f.rate,
-		Timeout:         f.timeout,
-		ProxyURL:        f.proxy,
-		Insecure:        f.insecure,
-		FollowRedirects: f.followRedirects,
+		Concurrency:       f.concurrency,
+		RatePerSec:        f.rate,
+		RatePerHostPerSec: f.ratePerHost,
+		Timeout:           f.timeout,
+		ProxyURL:          f.proxy,
+		Insecure:          f.insecure,
+		FollowRedirects:   f.followRedirects,
 	})
 
 	ctx := context.Background()
