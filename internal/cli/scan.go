@@ -30,6 +30,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/matchwords"
 	"github.com/bugsyhewitt/exhumed/internal/output"
 	"github.com/bugsyhewitt/exhumed/internal/pathlist"
+	"github.com/bugsyhewitt/exhumed/internal/replay"
 	"github.com/bugsyhewitt/exhumed/internal/respfilter"
 	"github.com/bugsyhewitt/exhumed/internal/scanstate"
 	"github.com/bugsyhewitt/exhumed/internal/timefilter"
@@ -50,6 +51,7 @@ type scanFlags struct {
 	rate            float64
 	timeout         time.Duration
 	proxy           string
+	replayProxy     string
 	insecure        bool
 	followRedirects bool
 	traversalDepth  int
@@ -297,6 +299,17 @@ type scanFlags struct {
 	// inactive titleMatcher keeps everything. Confirmed hits are never
 	// affected.
 	titleMatcher *matchtitle.Filter
+
+	// replayClient is the compiled form of replayProxy, populated by runScan.
+	// When active, every confirmed hit's winning request is re-issued through
+	// the configured proxy URL (Burp Suite, OWASP ZAP, mitmproxy, Caido) so the
+	// operator's interception tool sees the precise byte sequence that worked
+	// and can pick up manual exploitation from a populated history. Replay is
+	// out-of-band: errors are logged when --verbose is set but NEVER fail the
+	// scan. An inactive client (Parse on an empty spec) is a silent no-op so
+	// the call site can invoke Replay unconditionally. Mirrors ffuf's
+	// -replay-proxy / -p workflow.
+	replayClient *replay.Client
 }
 
 func newScanCmd() *cobra.Command {
@@ -330,6 +343,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().Float64Var(&f.rate, "rate", 0, "Max requests/sec (0 = unlimited)")
 	cmd.Flags().DurationVar(&f.timeout, "timeout", 10*time.Second, "Per-request timeout")
 	cmd.Flags().StringVar(&f.proxy, "proxy", "", "HTTP proxy URL (e.g. http://127.0.0.1:8080)")
+	cmd.Flags().StringVar(&f.replayProxy, "replay-proxy", "", "Replay every CONFIRMED hit's winning request through this proxy (e.g. http://127.0.0.1:8080) so Burp/ZAP/mitmproxy/Caido sees the exact bytes that worked and the operator can pick up manual exploitation from a populated HTTP history. Mirrors the ffuf -replay-proxy workflow: scan traffic stays on --proxy (or direct), only the confirmed-hit subset is mirrored to the replay proxy. Schemes: http, https, socks5, socks5h. Replay errors are logged when --verbose is set but NEVER fail the scan (the hit is already confirmed). Replay client is independent of --proxy on the scan path; it shares --insecure (skip TLS verification on the replay transport, useful for self-signed Burp/ZAP listeners) and --timeout (per-request cap).")
 	cmd.Flags().BoolVar(&f.insecure, "insecure", false, "Skip TLS certificate verification")
 	cmd.Flags().BoolVar(&f.followRedirects, "follow-redirects", false, "Follow 3xx redirects (default: report the redirect verbatim without following)")
 	cmd.Flags().IntVar(&f.traversalDepth, "traversal-depth", 8, "Max directory traversal depth")
@@ -458,6 +472,17 @@ func runScan(f scanFlags) error {
 	f.titleMatcher, err = matchtitle.Parse(f.matchTitle)
 	if err != nil {
 		return err
+	}
+
+	// Compile --replay-proxy so a malformed URL fails before any requests fire,
+	// not at the first confirmed hit. An empty spec yields an inactive client
+	// whose Replay is a silent no-op.
+	f.replayClient, err = replay.Parse(f.replayProxy, f.timeout, f.insecure)
+	if err != nil {
+		return err
+	}
+	if f.replayClient.Active() && f.verbose {
+		fmt.Fprintf(os.Stderr, "[*] Replay proxy active: confirmed hits mirrored to %s\n", f.replayClient.ProxyURL())
 	}
 
 	if !strings.Contains(f.url, f.marker) && !strings.Contains(f.data, f.marker) {
@@ -735,6 +760,14 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 				parser = "generic-secrets"
 			}
 			findings := extract.Parse(parser, r.Body, entry.Entry.Path)
+			// Mirror the winning request to the operator's replay proxy so
+			// Burp/ZAP/mitmproxy/Caido captures the exact bytes that worked.
+			// Out-of-band: a replay error never fails the scan — the hit is
+			// already confirmed by the local detect.Check above. An inactive
+			// replayClient (no --replay-proxy) is a silent no-op.
+			if err := f.replayClient.Replay(ctx, reqs[i]); err != nil && f.verbose {
+				fmt.Fprintf(os.Stderr, "[!] replay-proxy: %v\n", err)
+			}
 			return &hitRecord{
 				entryID:   entry.Entry.ID,
 				path:      entry.Entry.Path,

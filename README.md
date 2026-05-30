@@ -981,6 +981,58 @@ Like the other gates, `--match-title` only governs the *unconfirmed* stream —
 one). An empty spec keeps everything (no-op); an unparsable regex is a hard
 error before any request fires.
 
+### Replaying confirmed hits through an intercepting proxy (`--replay-proxy`)
+
+`--proxy` sends every scan request through a proxy — at high concurrency that
+floods Burp/ZAP/mitmproxy/Caido with thousands of soft-404/WAF responses and
+buries the few requests that actually mattered. `--replay-proxy` is the
+response-side companion: scan traffic stays on `--proxy` (or direct), and only
+the requests that produced a **CONFIRMED hit** are mirrored to the replay
+proxy. The operator's interception tool ends up with one entry per finding —
+the precise byte sequence that worked — ready for manual triage and follow-on
+exploitation. Mirrors the `ffuf -replay-proxy` / Burp Intruder "send to
+Repeater" workflow.
+
+```bash
+# Scan direct, replay every confirmed hit through Burp on 127.0.0.1:8080
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --replay-proxy http://127.0.0.1:8080
+
+# Different proxies for scan vs. replay — scan through a SOCKS jump host,
+# replay into the local Burp:
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --proxy socks5://jumphost:1080 \
+             --replay-proxy http://127.0.0.1:8080
+
+# HTTPS replay listener with a self-signed cert (typical Burp/ZAP setup):
+exhumed scan --url "https://target.local/?file=FUZZ" \
+             --replay-proxy https://127.0.0.1:8443 \
+             --insecure
+```
+
+Supported proxy schemes: `http`, `https`, `socks5`, `socks5h`. The replay
+client uses its own HTTP transport — its keep-alive pool, timeout, and TLS
+verification choice are independent of the scan engine. `--insecure` and
+`--timeout` apply to both paths; `--proxy` applies only to scan traffic.
+
+**Out-of-band semantics.** A replay error never fails the scan. The hit was
+already confirmed by the local detection engine; the replay is a courtesy I/O
+to populate the operator's interception proxy's HTTP history. A transient
+proxy-unreachable, a TLS handshake error, or a timeout against the replay
+proxy is logged when `--verbose` is set and otherwise silent. Replay failure
+means "Burp didn't see this hit", not "the hit didn't happen". A malformed
+`--replay-proxy` spec (missing scheme, unsupported scheme, missing host) is a
+hard error before any request fires.
+
+**What is and is not replayed.** Only confirmed hits — the same set
+`[CONFIRMED]` is printed for. The unconfirmed `[responded]` stream is not
+replayed (that's the noise `--filter-*` and `--match-*` exist to suppress; if
+you wanted everything in Burp you'd use `--proxy`). Chain-discovered follow-on
+hits ARE replayed when confirmed. The replay's response body is read and
+discarded so the keep-alive connection returns to the pool; the response is
+intentionally not surfaced — re-confirming a finding the scan engine already
+confirmed is not the point.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
