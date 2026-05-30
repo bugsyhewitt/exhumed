@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -46,10 +47,18 @@ type Result struct {
 type Config struct {
 	Concurrency int
 	RatePerSec  float64 // 0 = unlimited
-	Timeout     time.Duration
-	MaxBodySize int64
-	ProxyURL    string
-	Insecure    bool
+	// RatePerHostPerSec caps the request rate to a single target host (keyed by
+	// URL host:port) independently of the global RatePerSec budget. The two
+	// limits compose: a request must acquire a token from BOTH the global
+	// limiter (if active) and the per-host limiter for its destination (if
+	// active) before being dispatched. 0 = unlimited per-host. The typical use
+	// is to fan out across many targets (high --concurrency, high global --rate)
+	// while staying polite to each individual host (low --rate-per-host).
+	RatePerHostPerSec float64
+	Timeout           time.Duration
+	MaxBodySize       int64
+	ProxyURL          string
+	Insecure          bool
 	// FollowRedirects controls whether 3xx responses are transparently
 	// followed. When false (the default), the engine returns the redirect
 	// response verbatim — the original 3xx status and Location header are
@@ -61,9 +70,10 @@ type Config struct {
 
 // Engine dispatches requests concurrently.
 type Engine struct {
-	client  *http.Client
-	limiter *rate.Limiter
-	cfg     Config
+	client       *http.Client
+	limiter      *rate.Limiter
+	hostLimiters sync.Map // host string -> *rate.Limiter; populated lazily
+	cfg          Config
 }
 
 // New creates an Engine from cfg and starts the worker pool.
@@ -157,6 +167,14 @@ func (e *Engine) Run(ctx context.Context, reqs []Request) []Result {
 						continue
 					}
 				}
+				if e.cfg.RatePerHostPerSec > 0 {
+					if hl := e.hostLimiterFor(j.req.URL); hl != nil {
+						if err := hl.Wait(ctx); err != nil {
+							resultCh <- indexedResult{j.idx, Result{URL: j.req.URL, Err: err}}
+							continue
+						}
+					}
+				}
 
 				resultCh <- indexedResult{j.idx, e.do(ctx, j.req)}
 			}
@@ -174,6 +192,23 @@ func (e *Engine) Run(ctx context.Context, reqs []Request) []Result {
 		out[ir.idx] = ir.result
 	}
 	return out
+}
+
+// hostLimiterFor returns the per-host rate limiter for the request URL's host,
+// lazily creating one on first sight. An unparseable URL falls back to a
+// shared "" bucket so a malformed input still gets throttled rather than
+// bypassing the per-host budget entirely.
+func (e *Engine) hostLimiterFor(rawURL string) *rate.Limiter {
+	host := ""
+	if u, err := url.Parse(rawURL); err == nil {
+		host = u.Host
+	}
+	if v, ok := e.hostLimiters.Load(host); ok {
+		return v.(*rate.Limiter)
+	}
+	lim := rate.NewLimiter(rate.Limit(e.cfg.RatePerHostPerSec), 1)
+	actual, _ := e.hostLimiters.LoadOrStore(host, lim)
+	return actual.(*rate.Limiter)
 }
 
 // do executes a single request with retry logic.
