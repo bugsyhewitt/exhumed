@@ -88,7 +88,8 @@ type scanFlags struct {
 	matchHeaders    []string
 	matchBodyJSON   []string
 	matchTitle      []string
-	oob             string // collaborator domain for out-of-band payloads
+	oob             string        // collaborator domain for out-of-band payloads
+	maxTime         time.Duration // global wall-clock scan limit; 0 = unlimited
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -385,6 +386,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringArrayVar(&f.matchTitle, "match-title", nil, "Keep only unconfirmed responses whose HTML <title> matches. Repeatable; each value is one Go (RE2) regex applied as an unanchored 'contains' match against the extracted title (entity-decoded, whitespace-collapsed), e.g. --match-title '(?i)index of' --match-title '(?i)passwd|shadow|hosts'. Multiple rules compose as a conjunction (all must match). Unlike --match-regex, which scans the raw body bytes and can fire on a term embedded in a soft-404's chrome (nav bar, footer, generic error text), --match-title pins the keep-gate to one semantically meaningful field of an HTML response — the document title — so a real file read rendered inside an 'Index of /etc' / 'passwd' chrome survives while the uniform 'Not Found' / 'Access denied' noise (whose title is constant even when body length, word count, status, and headers wobble) is dropped. A non-HTML body, a body with no closed <title> element, or a truncated body never matches. The match gates run before the --filter-* suppressors; composes with the other --match-* gates (all must pass). Confirmed hits are always reported regardless.")
 
 	cmd.Flags().StringVar(&f.oob, "oob", "", "Fire out-of-band (OOB) payloads at every scan entry, pointing at this collaborator domain (e.g. 'xyz123.oast.fun'). Generates SMB-UNC, HTTP-wrapper, HTTPS-wrapper, and DNS-resolve variants via the same injection surfaces as the traversal payloads. The target's outbound interaction with the collaborator proves blind LFI even when the HTTP response reflects nothing. Requires a pre-configured collaborator: interactsh-client, Burp Collaborator, or any HTTP/DNS log you control. OOB payloads are fired alongside — not instead of — traversal payloads; the regular confirm logic is unaffected. Use --verbose to see each OOB payload fired.")
+	cmd.Flags().DurationVar(&f.maxTime, "max-time", 0, "Stop the scan after this wall-clock duration (e.g. '30m', '2h'). When the limit expires the current batch of in-flight requests completes, the results already collected are printed in full, and the process exits cleanly. The scan state file (--resume) is saved so the remaining entries can be picked up in a subsequent run. 0 (the default) means no limit — the scan runs to completion.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -669,7 +671,20 @@ func runScan(f scanFlags) error {
 	}
 	eng := engine.New(engCfg)
 
+	// Build the root scan context. When --max-time is set, cancel the context
+	// after the specified wall-clock duration so in-flight batches complete
+	// normally but no new batches are dispatched once the deadline fires.
 	ctx := context.Background()
+	var cancelMaxTime context.CancelFunc
+	if f.maxTime > 0 {
+		ctx, cancelMaxTime = context.WithTimeout(ctx, f.maxTime)
+		if f.verbose && outFmt == output.FormatText {
+			fmt.Fprintf(os.Stderr, "[*] max-time: scan will stop after %s\n", f.maxTime)
+		}
+	}
+	if cancelMaxTime != nil {
+		defer cancelMaxTime()
+	}
 	chainQ := chain.New(chain.Config{MaxDepth: f.maxDepth, MaxTargets: f.maxTargets})
 
 	scanStart := time.Now()
@@ -694,7 +709,22 @@ func runScan(f scanFlags) error {
 	}
 
 	// Phase 1: walk every database entry.
+	maxTimeReached := false
 	for _, entry := range entries {
+		// Honour --max-time: stop dispatching new entries once the deadline fires.
+		// In-flight requests in the previous batch have already completed (engine.Run
+		// is synchronous per batch). The partial results collected so far are printed
+		// normally and, when --resume is active, the state file reflects progress up
+		// to this point.
+		if ctx.Err() != nil {
+			maxTimeReached = true
+			if outFmt == output.FormatText {
+				fmt.Fprintf(os.Stderr, "\n[*] max-time reached (%s) — stopping after %d/%d entries\n",
+					f.maxTime, total, len(entries))
+			}
+			break
+		}
+
 		// Skip entries already attempted in a prior run.
 		if state != nil && state.Attempted(entry.Entry.ID) {
 			if f.verbose && outFmt == output.FormatText {
@@ -757,9 +787,9 @@ func runScan(f scanFlags) error {
 		}
 	}
 
-	// Phase 2: walk follow-on chain targets.
+	// Phase 2: walk follow-on chain targets (skipped entirely when max-time fired).
 	chainTargets := chainQ.Targets()
-	if len(chainTargets) > 0 && f.maxDepth > 0 {
+	if len(chainTargets) > 0 && f.maxDepth > 0 && !maxTimeReached {
 		if outFmt == output.FormatText {
 			fmt.Printf("\n── Follow-on chain (%d targets) ──────────────────────\n", len(chainTargets))
 		}
@@ -787,7 +817,11 @@ func runScan(f scanFlags) error {
 	}
 
 	// Text summary.
-	fmt.Printf("\n── Scan complete ──────────────────────────────────────\n")
+	if maxTimeReached {
+		fmt.Printf("\n── Scan stopped (max-time %s) ──────────────────────\n", f.maxTime)
+	} else {
+		fmt.Printf("\n── Scan complete ──────────────────────────────────────\n")
+	}
 	fmt.Printf("Requests: %d  |  Confirmed readable: %d  |  Chain targets: %d\n",
 		total, confirmed, len(chainTargets))
 	if oobFired > 0 {
