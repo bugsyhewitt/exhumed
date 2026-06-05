@@ -1134,6 +1134,45 @@ OOB payloads fired: 304 → check collaborator xyz123.oast.fun for interactions
 
 A malformed domain is a hard error before any request fires.
 
+### Scan limits: wall-clock time (`--max-time`) and request count (`--max-requests`)
+
+Two orthogonal controls let you bound how far a scan runs:
+
+| Flag | Unit | Default | Behaviour |
+|------|------|---------|-----------|
+| `--max-time DURATION` | time | `0` (unlimited) | Stop after this wall-clock duration (e.g. `30m`, `2h`). |
+| `--max-requests N` | requests | `0` (unlimited) | Stop once `N` HTTP requests have been dispatched. |
+
+Both are soft limits: the current batch of in-flight requests completes before
+the scan halts. All confirmed hits collected up to that point are printed in
+full.
+
+```bash
+# Stop after 10 minutes, no matter how many entries remain
+exhumed scan --url "https://target.example/page?f=FUZZ" \
+             --max-time 10m
+
+# Cap at 500 requests — useful for bug-bounty programmes with daily request quotas
+exhumed scan --url "https://target.example/page?f=FUZZ" \
+             --max-requests 500
+
+# Combine both: honour whichever limit triggers first
+exhumed scan --url "https://target.example/page?f=FUZZ" \
+             --max-time 5m \
+             --max-requests 300
+```
+
+When either limit fires, the stop banner names the reason:
+
+```
+[*] max-requests reached (300 requests dispatched) — stopping scan
+── Scan stopped (max-requests 300) ─────────────────────
+Requests: 300  |  Confirmed readable: 2  |  Chain targets: 0
+```
+
+When `--resume` is active the state file is saved at the stop point so
+remaining entries can be retried in a subsequent run.
+
 ### Local testbed (deliberately vulnerable dev server)
 
 ```bash
