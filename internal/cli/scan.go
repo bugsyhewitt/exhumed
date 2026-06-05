@@ -29,6 +29,7 @@ import (
 	"github.com/bugsyhewitt/exhumed/internal/matchtime"
 	"github.com/bugsyhewitt/exhumed/internal/matchtitle"
 	"github.com/bugsyhewitt/exhumed/internal/matchwords"
+	"github.com/bugsyhewitt/exhumed/internal/oob"
 	"github.com/bugsyhewitt/exhumed/internal/output"
 	"github.com/bugsyhewitt/exhumed/internal/pathlist"
 	"github.com/bugsyhewitt/exhumed/internal/replay"
@@ -87,6 +88,7 @@ type scanFlags struct {
 	matchHeaders    []string
 	matchBodyJSON   []string
 	matchTitle      []string
+	oob             string // collaborator domain for out-of-band payloads
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -382,6 +384,8 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringArrayVar(&f.matchBodyJSON, "match-body-json", nil, "Keep only unconfirmed responses whose decoded JSON body matches at a named path. Repeatable; each value is one 'json.path: regex' rule (dot-separated path with array indices; RE2 'contains' match on the scalar value's string form), e.g. --match-body-json 'ok: true' --match-body-json 'data.path: ^/(etc|home)/' --match-body-json 'results.0.name: passwd'. Multiple rules compose as a conjunction (all must match). Unlike --match-regex, which scans the raw body bytes, this walks the parsed JSON to one field — pinning the match to e.g. the 'content' field of a JSON-API envelope and dropping the '{\"ok\":false,\"error\":...}' soft-404 whose body length, word count, status, and headers are otherwise identical, without the cross-field false positives a whole-body regex produces. A non-JSON body, an absent path, or a path landing on an object/array never matches. Escape a literal dot in a key as '\\.'. The match gates run before the --filter-* suppressors; composes with the other --match-* gates (all must pass). Confirmed hits are always reported regardless.")
 	cmd.Flags().StringArrayVar(&f.matchTitle, "match-title", nil, "Keep only unconfirmed responses whose HTML <title> matches. Repeatable; each value is one Go (RE2) regex applied as an unanchored 'contains' match against the extracted title (entity-decoded, whitespace-collapsed), e.g. --match-title '(?i)index of' --match-title '(?i)passwd|shadow|hosts'. Multiple rules compose as a conjunction (all must match). Unlike --match-regex, which scans the raw body bytes and can fire on a term embedded in a soft-404's chrome (nav bar, footer, generic error text), --match-title pins the keep-gate to one semantically meaningful field of an HTML response — the document title — so a real file read rendered inside an 'Index of /etc' / 'passwd' chrome survives while the uniform 'Not Found' / 'Access denied' noise (whose title is constant even when body length, word count, status, and headers wobble) is dropped. A non-HTML body, a body with no closed <title> element, or a truncated body never matches. The match gates run before the --filter-* suppressors; composes with the other --match-* gates (all must pass). Confirmed hits are always reported regardless.")
 
+	cmd.Flags().StringVar(&f.oob, "oob", "", "Fire out-of-band (OOB) payloads at every scan entry, pointing at this collaborator domain (e.g. 'xyz123.oast.fun'). Generates SMB-UNC, HTTP-wrapper, HTTPS-wrapper, and DNS-resolve variants via the same injection surfaces as the traversal payloads. The target's outbound interaction with the collaborator proves blind LFI even when the HTTP response reflects nothing. Requires a pre-configured collaborator: interactsh-client, Burp Collaborator, or any HTTP/DNS log you control. OOB payloads are fired alongside — not instead of — traversal payloads; the regular confirm logic is unaffected. Use --verbose to see each OOB payload fired.")
+
 	_ = cmd.MarkFlagRequired("url")
 
 	return cmd
@@ -488,6 +492,26 @@ func runScan(f scanFlags) error {
 	}
 	if f.replayClient.Active() && f.verbose {
 		fmt.Fprintf(os.Stderr, "[*] Replay proxy active: confirmed hits mirrored to %s\n", f.replayClient.ProxyURL())
+	}
+
+	// Validate and generate --oob payloads. A malformed domain fails early so
+	// the operator knows before the scan starts, not after 10,000 blind requests.
+	var oobPayloads []oob.Payload
+	if f.oob != "" {
+		oobPayloads, err = oob.Generate(oob.Options{
+			Domain: f.oob,
+			Label:  true,
+		})
+		if err != nil {
+			return fmt.Errorf("--oob: %w", err)
+		}
+		if f.verbose && outFmt == output.FormatText {
+			fmt.Fprintf(os.Stderr, "[*] OOB: %d payload variants → %s (check your collaborator)\n",
+				len(oobPayloads), f.oob)
+			for _, p := range oobPayloads {
+				fmt.Fprintf(os.Stderr, "    oob %-14s  %s\n", string(p.Technique), p.Value)
+			}
+		}
 	}
 
 	if !strings.Contains(f.url, f.marker) && !strings.Contains(f.data, f.marker) {
@@ -656,6 +680,7 @@ func runScan(f scanFlags) error {
 
 	var hits []hitRecord
 	total, confirmed := 0, 0
+	oobFired := 0
 
 	// Replay confirmed hits from prior resumed runs so the summary reflects them.
 	if state != nil {
@@ -691,6 +716,28 @@ func runScan(f scanFlags) error {
 			}
 			// Feed extraction findings into chain engine.
 			chainQ.Enqueue(rec.findings)
+		}
+
+		// Fire OOB payloads for this entry alongside the traversal scan so that
+		// blind sinks (no response reflection) produce a collaborator callback.
+		// Results are intentionally discarded — confirmation happens at the
+		// collaborator, not here. Errors are best-effort logged in verbose mode.
+		if len(oobPayloads) > 0 {
+			oobReqs := make([]engine.Request, len(oobPayloads))
+			for i, p := range oobPayloads {
+				oobReqs[i] = inject.Substitute(tmpl, f.marker, p.Value)
+			}
+			oobResults := eng.Run(ctx, oobReqs)
+			for i, r := range oobResults {
+				if r.Err != nil && f.verbose {
+					fmt.Fprintf(os.Stderr, "[!] oob %s — %v\n", string(oobPayloads[i].Technique), r.Err)
+				}
+			}
+			oobFired += len(oobPayloads)
+			if f.verbose && outFmt == output.FormatText {
+				fmt.Fprintf(os.Stderr, "[*] oob: fired %d payloads for entry=%s\n",
+					len(oobPayloads), entry.Entry.ID)
+			}
 		}
 
 		// Persist progress: mark this entry attempted and flush atomically.
@@ -743,6 +790,10 @@ func runScan(f scanFlags) error {
 	fmt.Printf("\n── Scan complete ──────────────────────────────────────\n")
 	fmt.Printf("Requests: %d  |  Confirmed readable: %d  |  Chain targets: %d\n",
 		total, confirmed, len(chainTargets))
+	if oobFired > 0 {
+		fmt.Printf("OOB payloads fired: %d → check collaborator %s for interactions\n",
+			oobFired, f.oob)
+	}
 	if f.autoCalibrate > 0 {
 		fmt.Printf("Auto-calibrate: target=%s  final rate=%.2f req/s\n",
 			f.autoCalibrate, eng.CalibrateRate())
