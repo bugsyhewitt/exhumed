@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -67,28 +68,32 @@ type scanFlags struct {
 	maxDepth        int
 	maxTargets      int
 	outputFormat    string
-	resume          string
-	pathsFile       string
-	extensions      []string
-	filterSize      string
-	filterCode      string
-	filterRegex     string
-	filterTime      string
-	filterWords     string
-	filterLines     string
-	filterHeaders   []string
-	filterTitle     []string
-	filterBodyJSON  []string
-	matchRegex      string
-	matchCode       string
-	matchSize       string
-	matchTime       string
-	matchWords      string
-	matchLines      string
-	matchHeaders    []string
-	matchBodyJSON   []string
-	matchTitle      []string
-	oob             string // collaborator domain for out-of-band payloads
+	// outFmt is the parsed form of outputFormat, populated by runScan. It lets
+	// scanEntry suppress the human "[responded]" stream in structured (json/csv)
+	// modes so it never corrupts the single document written to stdout.
+	outFmt         output.Format
+	resume         string
+	pathsFile      string
+	extensions     []string
+	filterSize     string
+	filterCode     string
+	filterRegex    string
+	filterTime     string
+	filterWords    string
+	filterLines    string
+	filterHeaders  []string
+	filterTitle    []string
+	filterBodyJSON []string
+	matchRegex     string
+	matchCode      string
+	matchSize      string
+	matchTime      string
+	matchWords     string
+	matchLines     string
+	matchHeaders   []string
+	matchBodyJSON  []string
+	matchTitle     []string
+	oob            string // collaborator domain for out-of-band payloads
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -361,7 +366,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().IntVar(&f.maxDepth, "max-depth", 3, "Max follow-on chain depth (0 = disable chaining)")
 	cmd.Flags().IntVar(&f.maxTargets, "max-targets", 500, "Hard cap on total follow-on targets")
 	cmd.Flags().StringVar(&f.dbPath, "db", defaultDBPath, "Path to database root (defaults to the freshest of the bundled DB and the feed cache)")
-	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text or json")
+	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text, json, or csv. csv emits one row per confirmed finding (header row first), suitable for spreadsheets or grep/cut pipelines; like json it is written to stdout after the scan completes and only ever contains confirmed hits.")
 	cmd.Flags().StringVar(&f.resume, "resume", "", "Persist per-entry progress to this file and skip already-attempted entries on restart")
 	cmd.Flags().StringVar(&f.pathsFile, "paths-file", "", "Scan additional file paths from a SecLists-style wordlist (one path per line; '#' comments and blanks ignored)")
 	cmd.Flags().StringSliceVar(&f.extensions, "extensions", nil, "Append file extensions to each --paths-file entry (ffuf -e workflow), e.g. '.php,.bak,.old'. A leading dot is optional. Requires --paths-file.")
@@ -407,6 +412,7 @@ func runScan(f scanFlags) error {
 	if err != nil {
 		return err
 	}
+	f.outFmt = outFmt
 
 	// Compile the response-noise filters up front so a malformed spec fails
 	// before any requests fire.
@@ -673,9 +679,19 @@ func runScan(f scanFlags) error {
 	chainQ := chain.New(chain.Config{MaxDepth: f.maxDepth, MaxTargets: f.maxTargets})
 
 	scanStart := time.Now()
-	var jsonWriter *output.JSONWriter
-	if outFmt == output.FormatJSON {
-		jsonWriter = output.NewJSONWriter(f.url, scanStart)
+	// structWriter is the active non-text (structured) writer: JSON or CSV.
+	// Both share the AddHit/Finalise contract, so the hit-emit and finalise
+	// sites below drive either through the same calls. It stays nil in text mode.
+	var structWriter interface {
+		AddHit(entryID, path, technique string, status int, elapsed time.Duration,
+			snippets []string, findings []extract.Finding, showSecrets bool, chainDepth int)
+		Finalise(out io.Writer, totalRequests, chainTargetsQueued int) error
+	}
+	switch outFmt {
+	case output.FormatJSON:
+		structWriter = output.NewJSONWriter(f.url, scanStart)
+	case output.FormatCSV:
+		structWriter = output.NewCSVWriter(f.url, scanStart)
 	}
 
 	var hits []hitRecord
@@ -711,7 +727,7 @@ func runScan(f scanFlags) error {
 			if outFmt == output.FormatText {
 				printHit(*rec, f.showSecrets)
 			} else {
-				jsonWriter.AddHit(rec.entryID, rec.path, rec.technique, rec.status,
+				structWriter.AddHit(rec.entryID, rec.path, rec.technique, rec.status,
 					rec.elapsed, rec.snippets, rec.findings, f.showSecrets, 0)
 			}
 			// Feed extraction findings into chain engine.
@@ -775,15 +791,15 @@ func runScan(f scanFlags) error {
 					fmt.Printf("[CHAIN-HIT depth=%d via=%s]\n", tgt.Depth, tgt.FromFinding)
 					printHit(*rec, f.showSecrets)
 				} else {
-					jsonWriter.AddHit(rec.entryID, rec.path, rec.technique, rec.status,
+					structWriter.AddHit(rec.entryID, rec.path, rec.technique, rec.status,
 						rec.elapsed, rec.snippets, rec.findings, f.showSecrets, tgt.Depth)
 				}
 			}
 		}
 	}
 
-	if outFmt == output.FormatJSON {
-		return jsonWriter.Finalise(os.Stdout, total, len(chainTargets))
+	if structWriter != nil {
+		return structWriter.Finalise(os.Stdout, total, len(chainTargets))
 	}
 
 	// Text summary.
@@ -875,7 +891,12 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 		// known noise, or --filter-body-json flags this response's decoded JSON as
 		// known noise at a named path. Confirmed hits (handled above) are never
 		// affected by any of these gates.
-		if !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.lineMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && f.bodyJSONMatcher.Keep(r.Body) && f.titleMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) && !f.titleFilter.MatchBody(r.Body) && !f.bodyJSONFilter.MatchBody(r.Body) {
+		// The "[responded]" stream is human chatter for the interactive text
+		// mode only — in json/csv mode the sole stdout artifact is the structured
+		// document written at finalise, so emitting these lines would corrupt it
+		// (and they are not part of either machine schema). The match/filter gates
+		// still apply in text mode exactly as before.
+		if f.outFmt == output.FormatText && !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.lineMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && f.bodyJSONMatcher.Keep(r.Body) && f.titleMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) && !f.titleFilter.MatchBody(r.Body) && !f.bodyJSONFilter.MatchBody(r.Body) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}

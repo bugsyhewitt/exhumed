@@ -1,8 +1,9 @@
 // Package output provides structured output formatting for exhumed scan results.
-// It supports two modes: text (human-readable, default) and json (machine-readable).
+// It supports three modes: text (human-readable, default), json (machine-readable),
+// and csv (spreadsheet/grep-friendly, one row per confirmed finding).
 //
-// JSON output is emitted as a single JSON object written to stdout after the scan
-// completes. Text output is written incrementally as hits are found.
+// JSON and CSV output are emitted as a single document written to stdout after the
+// scan completes. Text output is written incrementally as hits are found.
 package output
 
 import (
@@ -22,6 +23,9 @@ const (
 	FormatText Format = "text"
 	// FormatJSON emits a single JSON document after the scan completes.
 	FormatJSON Format = "json"
+	// FormatCSV emits a CSV document (one row per confirmed finding) after the
+	// scan completes.
+	FormatCSV Format = "csv"
 )
 
 // ParseFormat parses a format string, returning an error on unrecognised values.
@@ -31,8 +35,10 @@ func ParseFormat(s string) (Format, error) {
 		return FormatText, nil
 	case "json":
 		return FormatJSON, nil
+	case "csv":
+		return FormatCSV, nil
 	default:
-		return "", fmt.Errorf("unknown output format %q: valid values are text, json", s)
+		return "", fmt.Errorf("unknown output format %q: valid values are text, json, csv", s)
 	}
 }
 
