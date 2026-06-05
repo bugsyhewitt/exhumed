@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bugsyhewitt/exhumed/internal/bodyfilter"
+	"github.com/bugsyhewitt/exhumed/internal/calibrate"
 	"github.com/bugsyhewitt/exhumed/internal/chain"
 	"github.com/bugsyhewitt/exhumed/internal/codefilter"
 	"github.com/bugsyhewitt/exhumed/internal/db"
@@ -50,6 +51,7 @@ type scanFlags struct {
 	concurrency     int
 	rate            float64
 	ratePerHost     float64
+	autoCalibrate   time.Duration
 	timeout         time.Duration
 	proxy           string
 	replayProxy     string
@@ -342,6 +344,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringArrayVarP(&f.cookies, "cookie", "b", nil, "Cookie (repeatable): 'name=value'")
 	cmd.Flags().IntVarP(&f.concurrency, "concurrency", "c", 10, "Number of concurrent workers")
 	cmd.Flags().Float64Var(&f.rate, "rate", 0, "Max requests/sec, global across all hosts (0 = unlimited)")
+	cmd.Flags().DurationVar(&f.autoCalibrate, "auto-calibrate", 0, "Adaptively tune the request rate to hold the target's median response latency near this duration (e.g. '200ms'). The engine starts at --rate (or its built-in maximum when --rate is unset), then after each batch of requests compares the batch's median latency against the target: a median above target*1.2 divides the rate by 1.5 (back off); a median below target*0.8 multiplies the rate by 1.25 (probe up); a median in [target*0.8, target*1.2] holds steady. The decision uses the median (not the mean) so a single outlier slow response cannot collapse the rate. Composes with --rate as a hard ceiling: the adaptive loop can only narrow what --rate permits, never exceed it; with --rate unset the loop is clamped to a built-in max of 1000 req/s and a min of 0.5 req/s. Use this when scanning a long-lived target whose load varies during the scan — bug-bounty engagements where ramping past a per-IP threshold trips WAF blocking, or noisy targets where a static --rate is either too aggressive (and slows the target into degraded responses) or too conservative (and wastes scan time). 0 (the default) disables the loop entirely — --rate alone is in effect. Implies --verbose-friendly rate-change logging on stderr.")
 	cmd.Flags().Float64Var(&f.ratePerHost, "rate-per-host", 0, "Max requests/sec to any single target host, keyed by URL host:port (0 = unlimited). Composes with --rate: a request must acquire a token from BOTH the global limiter and the per-host limiter before being sent. Use when fanning out across many targets (high --concurrency, high --rate) while staying polite to each individual host — e.g. --rate 200 --rate-per-host 5 lets the scan push 200 req/s in aggregate but never more than 5 req/s at any one server. With a single target host, --rate-per-host acts as a tighter cap on top of --rate; with one target, setting only --rate-per-host is equivalent to --rate. Per-host limiters are created lazily on first request to each host, so a scan that only touches one host pays no overhead for the per-host machinery.")
 	cmd.Flags().DurationVar(&f.timeout, "timeout", 10*time.Second, "Per-request timeout")
 	cmd.Flags().StringVar(&f.proxy, "proxy", "", "HTTP proxy URL (e.g. http://127.0.0.1:8080)")
@@ -619,15 +622,28 @@ func runScan(f scanFlags) error {
 		fmt.Fprintf(os.Stderr, "[*] Injection surfaces: %v\n", surfaces)
 	}
 
-	eng := engine.New(engine.Config{
-		Concurrency:       f.concurrency,
-		RatePerSec:        f.rate,
-		RatePerHostPerSec: f.ratePerHost,
-		Timeout:           f.timeout,
-		ProxyURL:          f.proxy,
-		Insecure:          f.insecure,
-		FollowRedirects:   f.followRedirects,
-	})
+	engCfg := engine.Config{
+		Concurrency:         f.concurrency,
+		RatePerSec:          f.rate,
+		RatePerHostPerSec:   f.ratePerHost,
+		Timeout:             f.timeout,
+		ProxyURL:            f.proxy,
+		Insecure:            f.insecure,
+		FollowRedirects:     f.followRedirects,
+		AutoCalibrateTarget: f.autoCalibrate,
+	}
+	if f.autoCalibrate > 0 && f.verbose && outFmt == output.FormatText {
+		// Log only actual rate changes; an "in-band" no-op batch per entry
+		// would otherwise dominate stderr on a healthy target.
+		engCfg.OnCalibrate = func(obs calibrate.Observation) {
+			if !obs.Changed {
+				return
+			}
+			fmt.Fprintf(os.Stderr, "[*] auto-calibrate: median=%s rate %.2f → %.2f req/s (%s)\n",
+				obs.Median, obs.OldRate, obs.NewRate, obs.Reason)
+		}
+	}
+	eng := engine.New(engCfg)
 
 	ctx := context.Background()
 	chainQ := chain.New(chain.Config{MaxDepth: f.maxDepth, MaxTargets: f.maxTargets})
@@ -727,6 +743,10 @@ func runScan(f scanFlags) error {
 	fmt.Printf("\n── Scan complete ──────────────────────────────────────\n")
 	fmt.Printf("Requests: %d  |  Confirmed readable: %d  |  Chain targets: %d\n",
 		total, confirmed, len(chainTargets))
+	if f.autoCalibrate > 0 {
+		fmt.Printf("Auto-calibrate: target=%s  final rate=%.2f req/s\n",
+			f.autoCalibrate, eng.CalibrateRate())
+	}
 
 	if len(hits) > 0 {
 		fmt.Printf("\n── Confirmed hits ─────────────────────────────────────\n")

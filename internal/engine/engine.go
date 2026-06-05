@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bugsyhewitt/exhumed/internal/calibrate"
 	"golang.org/x/time/rate"
 )
 
@@ -66,6 +67,30 @@ type Config struct {
 	// Not following redirects is the correct default for a fuzzer: a 302 to a
 	// login page must not be reported as the login page's 200.
 	FollowRedirects bool
+
+	// AutoCalibrateTarget enables adaptive rate control: when non-zero, the
+	// engine installs an internal *rate.Limiter alongside the static RatePerSec
+	// limiter, observes the response latency of each Run batch, and re-tunes
+	// the adaptive limiter towards a median response latency of this target
+	// (e.g. 200ms). Composes with RatePerSec — both gates must be passed, so
+	// the static --rate is a hard ceiling that the auto-calibrate loop can
+	// only narrow. See internal/calibrate for the decision rule.
+	AutoCalibrateTarget time.Duration
+
+	// AutoCalibrateInitial is the rate (req/s) the adaptive limiter starts
+	// at when AutoCalibrateTarget > 0. Zero falls back to the controller's
+	// default (calibrate.DefaultMaxRate). Capped by AutoCalibrateMax.
+	AutoCalibrateInitial float64
+
+	// AutoCalibrateMin / AutoCalibrateMax bound the adaptive limiter. Zero
+	// falls back to the calibrate package defaults.
+	AutoCalibrateMin float64
+	AutoCalibrateMax float64
+
+	// OnCalibrate, if non-nil, is invoked after every Run batch that observed
+	// at least one latency under AutoCalibrate mode. Useful for verbose logging
+	// from the CLI without giving the engine a logger dependency.
+	OnCalibrate func(calibrate.Observation)
 }
 
 // Engine dispatches requests concurrently.
@@ -74,6 +99,13 @@ type Engine struct {
 	limiter      *rate.Limiter
 	hostLimiters sync.Map // host string -> *rate.Limiter; populated lazily
 	cfg          Config
+
+	// calibrator and calibLimiter are non-nil only when AutoCalibrateTarget > 0.
+	// calibLimiter is a separate *rate.Limiter whose SetLimit is driven by
+	// the controller after each Run batch. It composes with limiter as an
+	// additional gate so the static --rate (limiter) remains a hard ceiling.
+	calibrator   *calibrate.Controller
+	calibLimiter *rate.Limiter
 }
 
 // New creates an Engine from cfg and starts the worker pool.
@@ -124,6 +156,24 @@ func New(cfg Config) *Engine {
 		cfg:     cfg,
 	}
 
+	if cfg.AutoCalibrateTarget > 0 {
+		// Errors from NewController are operator-facing config errors (a
+		// non-positive target, an inverted clamp); the CLI validates the flag
+		// before reaching here, so a controller failure at this point would be
+		// a programmer error. Fall back to disabled rather than panic — the
+		// engine still works without the adaptive loop.
+		ctl, err := calibrate.NewController(calibrate.Config{
+			Target:      cfg.AutoCalibrateTarget,
+			InitialRate: cfg.AutoCalibrateInitial,
+			MinRate:     cfg.AutoCalibrateMin,
+			MaxRate:     cfg.AutoCalibrateMax,
+		})
+		if err == nil {
+			e.calibrator = ctl
+			e.calibLimiter = rate.NewLimiter(rate.Limit(ctl.Rate()), 1)
+		}
+	}
+
 	return e
 }
 
@@ -167,6 +217,12 @@ func (e *Engine) Run(ctx context.Context, reqs []Request) []Result {
 						continue
 					}
 				}
+				if e.calibLimiter != nil {
+					if err := e.calibLimiter.Wait(ctx); err != nil {
+						resultCh <- indexedResult{j.idx, Result{URL: j.req.URL, Err: err}}
+						continue
+					}
+				}
 				if e.cfg.RatePerHostPerSec > 0 {
 					if hl := e.hostLimiterFor(j.req.URL); hl != nil {
 						if err := hl.Wait(ctx); err != nil {
@@ -191,7 +247,40 @@ func (e *Engine) Run(ctx context.Context, reqs []Request) []Result {
 		ir := <-resultCh
 		out[ir.idx] = ir.result
 	}
+
+	if e.calibrator != nil {
+		lats := make([]time.Duration, 0, len(out))
+		for _, r := range out {
+			// A request that errored out before getting a response carries an
+			// Elapsed measured against the retry/backoff loop, which is a
+			// poor proxy for server latency. Skip those — calibrate already
+			// drops zero/negative samples, but a network error with a
+			// non-zero Elapsed would otherwise pollute the median.
+			if r.Err == nil && r.Elapsed > 0 {
+				lats = append(lats, r.Elapsed)
+			}
+		}
+		obs := e.calibrator.Observe(lats)
+		if obs.Changed {
+			e.calibLimiter.SetLimit(rate.Limit(obs.NewRate))
+		}
+		if e.cfg.OnCalibrate != nil && obs.Samples > 0 {
+			e.cfg.OnCalibrate(obs)
+		}
+	}
+
 	return out
+}
+
+// CalibrateRate returns the current adaptive request rate (req/s) when
+// AutoCalibrateTarget is active. Returns 0 when auto-calibration is disabled.
+// Useful for inspection in tests and for surfacing the final rate in summary
+// output.
+func (e *Engine) CalibrateRate() float64 {
+	if e.calibrator == nil {
+		return 0
+	}
+	return e.calibrator.Rate()
 }
 
 // hostLimiterFor returns the per-host rate limiter for the request URL's host,
