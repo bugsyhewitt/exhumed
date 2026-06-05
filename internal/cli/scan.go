@@ -90,6 +90,7 @@ type scanFlags struct {
 	matchTitle      []string
 	oob             string        // collaborator domain for out-of-band payloads
 	maxTime         time.Duration // global wall-clock scan limit; 0 = unlimited
+	maxRequests     int           // global HTTP request cap; 0 = unlimited
 
 	// sizeFilter is the compiled form of filterSize, populated by runScan.
 	// It suppresses unconfirmed "[responded]" lines whose body length matches
@@ -387,6 +388,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 
 	cmd.Flags().StringVar(&f.oob, "oob", "", "Fire out-of-band (OOB) payloads at every scan entry, pointing at this collaborator domain (e.g. 'xyz123.oast.fun'). Generates SMB-UNC, HTTP-wrapper, HTTPS-wrapper, and DNS-resolve variants via the same injection surfaces as the traversal payloads. The target's outbound interaction with the collaborator proves blind LFI even when the HTTP response reflects nothing. Requires a pre-configured collaborator: interactsh-client, Burp Collaborator, or any HTTP/DNS log you control. OOB payloads are fired alongside — not instead of — traversal payloads; the regular confirm logic is unaffected. Use --verbose to see each OOB payload fired.")
 	cmd.Flags().DurationVar(&f.maxTime, "max-time", 0, "Stop the scan after this wall-clock duration (e.g. '30m', '2h'). When the limit expires the current batch of in-flight requests completes, the results already collected are printed in full, and the process exits cleanly. The scan state file (--resume) is saved so the remaining entries can be picked up in a subsequent run. 0 (the default) means no limit — the scan runs to completion.")
+	cmd.Flags().IntVar(&f.maxRequests, "max-requests", 0, "Stop the scan once this many HTTP requests have been dispatched (e.g. '--max-requests 500'). The current batch of in-flight requests completes before the scan halts; partial results collected so far are printed in full. When --resume is active the state file is saved at this point so remaining entries can be retried later. 0 (the default) means no cap — the scan runs to completion. Useful for rate-limited bug-bounty programmes with per-day request quotas and for quick triage scans where you want a fast signal without walking the entire database.")
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -710,6 +712,7 @@ func runScan(f scanFlags) error {
 
 	// Phase 1: walk every database entry.
 	maxTimeReached := false
+	maxRequestsReached := false
 	for _, entry := range entries {
 		// Honour --max-time: stop dispatching new entries once the deadline fires.
 		// In-flight requests in the previous batch have already completed (engine.Run
@@ -721,6 +724,19 @@ func runScan(f scanFlags) error {
 			if outFmt == output.FormatText {
 				fmt.Fprintf(os.Stderr, "\n[*] max-time reached (%s) — stopping after %d/%d entries\n",
 					f.maxTime, total, len(entries))
+			}
+			break
+		}
+
+		// Honour --max-requests: stop dispatching new entries once the cap is hit.
+		// The check runs before the next batch is sent so the cap is never exceeded
+		// by more than one batch's worth of requests. Confirmed hits already logged
+		// are preserved; partial results are printed in full.
+		if f.maxRequests > 0 && total >= f.maxRequests {
+			maxRequestsReached = true
+			if outFmt == output.FormatText {
+				fmt.Fprintf(os.Stderr, "\n[*] max-requests reached (%d requests dispatched) — stopping scan\n",
+					total)
 			}
 			break
 		}
@@ -787,9 +803,10 @@ func runScan(f scanFlags) error {
 		}
 	}
 
-	// Phase 2: walk follow-on chain targets (skipped entirely when max-time fired).
+	// Phase 2: walk follow-on chain targets (skipped entirely when max-time or
+	// max-requests fired — further requests would exceed the intended limits).
 	chainTargets := chainQ.Targets()
-	if len(chainTargets) > 0 && f.maxDepth > 0 && !maxTimeReached {
+	if len(chainTargets) > 0 && f.maxDepth > 0 && !maxTimeReached && !maxRequestsReached {
 		if outFmt == output.FormatText {
 			fmt.Printf("\n── Follow-on chain (%d targets) ──────────────────────\n", len(chainTargets))
 		}
@@ -817,9 +834,12 @@ func runScan(f scanFlags) error {
 	}
 
 	// Text summary.
-	if maxTimeReached {
+	switch {
+	case maxTimeReached:
 		fmt.Printf("\n── Scan stopped (max-time %s) ──────────────────────\n", f.maxTime)
-	} else {
+	case maxRequestsReached:
+		fmt.Printf("\n── Scan stopped (max-requests %d) ─────────────────────\n", f.maxRequests)
+	default:
 		fmt.Printf("\n── Scan complete ──────────────────────────────────────\n")
 	}
 	fmt.Printf("Requests: %d  |  Confirmed readable: %d  |  Chain targets: %d\n",
