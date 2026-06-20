@@ -1,6 +1,7 @@
 // Pins the v1.0 release contract for exhumed:
-//   (1) version.Version must equal "1.0.0" (was "dev" pre-release).
-//   (2) CHANGELOG.md must contain a "## [1.0.0]" entry.
+//
+//	(1) version.Version must equal "1.0.0" (was "dev" pre-release).
+//	(2) CHANGELOG.md must contain a "## [1.0.0]" entry.
 //
 // If either regresses, the v1.0 flip is no longer valid — fail the build.
 package version
