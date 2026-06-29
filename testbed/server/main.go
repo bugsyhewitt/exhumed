@@ -64,8 +64,16 @@ func main() {
 
 // serveFile resolves userPath inside the sandboxed fakeroot and writes the
 // file contents. Any attempt to escape the fakeroot via traversal sequences
-// is blocked: filepath.Clean normalises the path, and the prefix check
+// is blocked: filepath.Clean normalises the path, filepath.EvalSymlinks
+// resolves any symlinks BEFORE the prefix check, and the prefix check
 // verifies containment.
+//
+// SECURITY NOTE (round 14 implementation of Anthropic contain-post #1
+// takeaway): symlink resolution MUST happen BEFORE path validation. Without
+// EvalSymlinks, a symlink inside the sandbox (e.g. /tmp/fakeroot/leak ->
+// /etc/passwd) would pass the filepath.Clean + HasPrefix check (which only
+// normalises ../ sequences) and then os.ReadFile would follow the symlink
+// to read arbitrary host files. The original code was vulnerable to this.
 func (s *Server) serveFile(w http.ResponseWriter, userPath string) {
 	if userPath == "" {
 		http.Error(w, "missing path", http.StatusBadRequest)
@@ -76,14 +84,27 @@ func (s *Server) serveFile(w http.ResponseWriter, userPath string) {
 	// filepath.Join then roots it inside the fakeroot.
 	cleaned := filepath.Join(s.absRoot, filepath.Clean("/"+userPath))
 
+	// SECURITY: resolve symlinks BEFORE the prefix check. A symlink inside
+	// the sandbox could otherwise bypass containment. We EvalSymlinks on
+	// the candidate path; if the file doesn't exist yet, EvalSymlinks
+	// returns an error which we treat as a 404 below.
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		// Most likely cause: file doesn't exist (404). Other errors
+		// (permission denied, etc.) fall through to the same handling.
+		http.Error(w, "404 Not Found", http.StatusNotFound)
+		return
+	}
+
 	// Containment check: resolved path must start with absRoot + separator.
 	// Adding the separator prevents prefix collisions like /tmp/fakeroot2.
-	if !strings.HasPrefix(cleaned, s.absRoot+string(os.PathSeparator)) && cleaned != s.absRoot {
+	// We now check the SYMLINK-RESOLVED path, not the literal-cleaned path.
+	if !strings.HasPrefix(resolved, s.absRoot+string(os.PathSeparator)) && resolved != s.absRoot {
 		http.Error(w, "403 Forbidden", http.StatusForbidden)
 		return
 	}
 
-	data, err := os.ReadFile(cleaned)
+	data, err := os.ReadFile(resolved)
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "404 Not Found", http.StatusNotFound)
