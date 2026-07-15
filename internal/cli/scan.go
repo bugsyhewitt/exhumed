@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -96,6 +97,7 @@ type scanFlags struct {
 	matchTitle     []string
 	oob            string        // collaborator domain for out-of-band payloads
 	oobListenAddr  string        // --oob-listen: start built-in HTTP callback listener here
+	oobDNSPort     int           // --oob-dns-port: also start a DNS listener on this port (0 = disabled)
 	maxTime        time.Duration // global wall-clock scan limit; 0 = unlimited
 	maxRequests    int           // global HTTP request cap; 0 = unlimited
 
@@ -394,7 +396,8 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringArrayVar(&f.matchTitle, "match-title", nil, "Keep only unconfirmed responses whose HTML <title> matches. Repeatable; each value is one Go (RE2) regex applied as an unanchored 'contains' match against the extracted title (entity-decoded, whitespace-collapsed), e.g. --match-title '(?i)index of' --match-title '(?i)passwd|shadow|hosts'. Multiple rules compose as a conjunction (all must match). Unlike --match-regex, which scans the raw body bytes and can fire on a term embedded in a soft-404's chrome (nav bar, footer, generic error text), --match-title pins the keep-gate to one semantically meaningful field of an HTML response — the document title — so a real file read rendered inside an 'Index of /etc' / 'passwd' chrome survives while the uniform 'Not Found' / 'Access denied' noise (whose title is constant even when body length, word count, status, and headers wobble) is dropped. A non-HTML body, a body with no closed <title> element, or a truncated body never matches. The match gates run before the --filter-* suppressors; composes with the other --match-* gates (all must pass). Confirmed hits are always reported regardless.")
 
 	cmd.Flags().StringVar(&f.oob, "oob", "", "Fire out-of-band (OOB) payloads at every scan entry, pointing at this collaborator domain (e.g. 'xyz123.oast.fun'). Generates SMB-UNC, HTTP-wrapper, HTTPS-wrapper, and DNS-resolve variants via the same injection surfaces as the traversal payloads. The target's outbound interaction with the collaborator proves blind LFI even when the HTTP response reflects nothing. Requires a pre-configured collaborator: interactsh-client, Burp Collaborator, or any HTTP/DNS log you control. OOB payloads are fired alongside — not instead of — traversal payloads; the regular confirm logic is unaffected. Use --verbose to see each OOB payload fired.")
-	cmd.Flags().StringVar(&f.oobListenAddr, "oob-listen", "", "Start a built-in HTTP listener on this address (e.g. ':8888' or '127.0.0.1:9090') before scanning and inject a unique per-entry callback URL into each scan entry. When the target dereferences the injected URL (as happens in blind LFI sinks where the app reads or includes a file but never reflects its contents), the listener records the interaction and automatically correlates it to the entry that triggered it. After scanning, a summary is printed listing every callback received and the entry it corresponds to. Unlike --oob (which points payloads at an external collaborator), --oob-listen requires no external service and produces instant, correlated results for HTTP callbacks. DNS and SMB interactions are not captured by the built-in listener; for those, use --oob with an external collaborator. The two flags may be combined.")
+	cmd.Flags().StringVar(&f.oobListenAddr, "oob-listen", "", "Start a built-in HTTP listener on this address (e.g. ':8888' or '127.0.0.1:9090') before scanning and inject a unique per-entry callback URL into each scan entry. When the target dereferences the injected URL (as happens in blind LFI sinks where the app reads or includes a file but never reflects its contents), the listener records the interaction and automatically correlates it to the entry that triggered it. After scanning, a summary is printed listing every callback received and the entry it corresponds to. Unlike --oob (which points payloads at an external collaborator), --oob-listen requires no external service and produces instant, correlated results for HTTP callbacks. Pair with --oob-dns-port to also capture DNS callbacks from the same scan. The two flags may be combined with --oob.")
+	cmd.Flags().IntVar(&f.oobDNSPort, "oob-dns-port", 0, "Also start a built-in UDP DNS listener on this port alongside --oob-listen (e.g. '--oob-dns-port 5353'). For each scan entry a UNC payload containing a unique cb-<idx>.oob.local hostname is injected; when the target resolves that hostname the DNS query is captured, correlated to the triggering entry, and printed in the post-scan summary. Use port 5353 to avoid requiring root (port 53). Requires --oob-listen; 0 = disabled (default). The DNS listener binds to the same host as --oob-listen.")
 	cmd.Flags().DurationVar(&f.maxTime, "max-time", 0, "Stop the scan after this wall-clock duration (e.g. '30m', '2h'). When the limit expires the current batch of in-flight requests completes, the results already collected are printed in full, and the process exits cleanly. The scan state file (--resume) is saved so the remaining entries can be picked up in a subsequent run. 0 (the default) means no limit — the scan runs to completion.")
 	cmd.Flags().IntVar(&f.maxRequests, "max-requests", 0, "Stop the scan once this many HTTP requests have been dispatched (e.g. '--max-requests 500'). The current batch of in-flight requests completes before the scan halts; partial results collected so far are printed in full. When --resume is active the state file is saved at this point so remaining entries can be retried later. 0 (the default) means no cap — the scan runs to completion. Useful for rate-limited bug-bounty programmes with per-day request quotas and for quick triage scans where you want a fast signal without walking the entire database.")
 
@@ -533,7 +536,7 @@ func runScan(f scanFlags) error {
 		oobLsnr        *oob.Listener
 		oobLsnrBase    string   // "http://host:port" — base URL injected into payloads
 		oobLsnrCancel  context.CancelFunc
-		oobLsnrEntries []string // entry index → entry ID, for post-scan correlation
+		oobLsnrEntries []string // entry index → entry ID, for post-scan correlation (shared with DNS)
 	)
 	if f.oobListenAddr != "" {
 		oobLsnr = oob.NewListener(nil)
@@ -552,15 +555,59 @@ func runScan(f scanFlags) error {
 		case boundAddr := <-readyCh:
 			oobLsnrBase = "http://" + boundAddr
 			if f.verbose && outFmt == output.FormatText {
-				fmt.Fprintf(os.Stderr, "[*] OOB listener started at %s\n", oobLsnrBase)
+				fmt.Fprintf(os.Stderr, "[*] OOB HTTP listener started at %s\n", oobLsnrBase)
 			}
 		case lsnrErr := <-lsnrErrCh:
 			return fmt.Errorf("--oob-listen: %w", lsnrErr)
 		}
 	}
+
+	// --oob-dns-port: start the built-in UDP DNS collaborator alongside the HTTP
+	// listener so that DNS lookups triggered by UNC payloads are captured and
+	// correlated to their originating entry. Requires --oob-listen.
+	var (
+		oobDNSLsnr   *oob.DNSListener
+		oobDNSAddr   string // bound "host:port" of the DNS listener, for diagnostics
+		oobDNSCancel context.CancelFunc
+	)
+	if f.oobDNSPort > 0 {
+		if f.oobListenAddr == "" {
+			return fmt.Errorf("--oob-dns-port requires --oob-listen")
+		}
+		// Bind the DNS listener to the same host as the HTTP listener so both are
+		// reachable at the same address. Unspecified / wildcard hosts default to
+		// loopback only, matching the HTTP listener's effective default.
+		dnsHost := oobHost(f.oobListenAddr)
+		dnsBindAddr := fmt.Sprintf("%s:%d", dnsHost, f.oobDNSPort)
+
+		oobDNSLsnr = oob.NewDNSListener(nil)
+		dnsCtx, dnsCancel := context.WithCancel(context.Background())
+		oobDNSCancel = dnsCancel
+		dnsReadyCh := make(chan string, 1)
+		dnsErrCh := make(chan error, 1)
+		go func() {
+			if serveErr := oobDNSLsnr.Serve(dnsCtx, dnsBindAddr, func(addr string) {
+				dnsReadyCh <- addr
+			}); serveErr != nil {
+				dnsErrCh <- serveErr
+			}
+		}()
+		select {
+		case oobDNSAddr = <-dnsReadyCh:
+			if f.verbose && outFmt == output.FormatText {
+				fmt.Fprintf(os.Stderr, "[*] OOB DNS listener started at %s\n", oobDNSAddr)
+			}
+		case dnsErr := <-dnsErrCh:
+			return fmt.Errorf("--oob-dns-port: %w", dnsErr)
+		}
+	}
+
 	defer func() {
 		if oobLsnrCancel != nil {
 			oobLsnrCancel()
+		}
+		if oobDNSCancel != nil {
+			oobDNSCancel()
 		}
 	}()
 
@@ -842,20 +889,40 @@ func runScan(f scanFlags) error {
 			}
 		}
 
-		// Fire a per-entry HTTP payload at the built-in OOB listener when
-		// --oob-listen is set. Each entry gets a unique path (/e/<idx>) so
-		// any interaction the target sends back can be correlated to this entry.
-		if oobLsnr != nil {
+		// Fire per-entry OOB listener payloads (HTTP and/or DNS). A shared
+		// index ties each entry to its callbacks across both listener types.
+		if oobLsnr != nil || oobDNSLsnr != nil {
 			entryIdx := len(oobLsnrEntries)
 			oobLsnrEntries = append(oobLsnrEntries, entry.Entry.ID)
-			entryURL := fmt.Sprintf("%s/e/%d", oobLsnrBase, entryIdx)
-			lsnrReq := inject.Substitute(tmpl, f.marker, entryURL)
-			lsnrResults := eng.Run(ctx, []engine.Request{lsnrReq})
-			if f.verbose && outFmt == output.FormatText {
-				if lsnrResults[0].Err != nil {
-					fmt.Fprintf(os.Stderr, "[!] oob-listen entry=%s: %v\n", entry.Entry.ID, lsnrResults[0].Err)
-				} else {
-					fmt.Fprintf(os.Stderr, "[*] oob-listen: fired for entry=%s → %s\n", entry.Entry.ID, entryURL)
+
+			if oobLsnr != nil {
+				entryURL := fmt.Sprintf("%s/e/%d", oobLsnrBase, entryIdx)
+				lsnrReq := inject.Substitute(tmpl, f.marker, entryURL)
+				lsnrResults := eng.Run(ctx, []engine.Request{lsnrReq})
+				if f.verbose && outFmt == output.FormatText {
+					if lsnrResults[0].Err != nil {
+						fmt.Fprintf(os.Stderr, "[!] oob-listen entry=%s: %v\n", entry.Entry.ID, lsnrResults[0].Err)
+					} else {
+						fmt.Fprintf(os.Stderr, "[*] oob-listen: fired for entry=%s → %s\n", entry.Entry.ID, entryURL)
+					}
+				}
+			}
+
+			if oobDNSLsnr != nil {
+				// Inject a UNC path whose hostname carries the entry index as a
+				// cb-<idx> label. Windows / SMB-aware loaders resolve the host
+				// via DNS before attempting the SMB connect, triggering a lookup
+				// that the built-in DNS listener captures and correlates.
+				dnsHost := fmt.Sprintf("cb-%d.oob.local", entryIdx)
+				uncPayload := `\\` + dnsHost + `\share`
+				dnsReq := inject.Substitute(tmpl, f.marker, uncPayload)
+				dnsResults := eng.Run(ctx, []engine.Request{dnsReq})
+				if f.verbose && outFmt == output.FormatText {
+					if dnsResults[0].Err != nil {
+						fmt.Fprintf(os.Stderr, "[!] oob-dns entry=%s: %v\n", entry.Entry.ID, dnsResults[0].Err)
+					} else {
+						fmt.Fprintf(os.Stderr, "[*] oob-dns: fired for entry=%s → %s\n", entry.Entry.ID, uncPayload)
+					}
 				}
 			}
 		}
@@ -932,15 +999,36 @@ func runScan(f scanFlags) error {
 				hitEntries[oobLsnrEntries[idx]] = struct{}{}
 			}
 		}
-		fmt.Printf("OOB listener: %d callbacks received for %d unique entries (listener at %s)\n",
+		fmt.Printf("OOB HTTP listener: %d callbacks received for %d unique entries (listener at %s)\n",
 			len(interactions), len(hitEntries), oobLsnrBase)
 		for _, in := range interactions {
 			entryID := "<unknown>"
 			if idx := oobParseEntryIdx(in.Path); idx >= 0 && idx < len(oobLsnrEntries) {
 				entryID = oobLsnrEntries[idx]
 			}
-			fmt.Printf("  [OOB callback] seq=%d entry=%s remote=%s method=%s\n",
+			fmt.Printf("  [OOB-HTTP callback] seq=%d entry=%s remote=%s method=%s\n",
 				in.Seq, entryID, in.RemoteIP, in.Method)
+		}
+	}
+	if oobDNSLsnr != nil {
+		oobDNSCancel()
+		oobDNSCancel = nil
+		dnsInteractions := oobDNSLsnr.DNSInteractions()
+		dnsHitEntries := make(map[string]struct{})
+		for _, in := range dnsInteractions {
+			if in.EntryIdx >= 0 && in.EntryIdx < len(oobLsnrEntries) {
+				dnsHitEntries[oobLsnrEntries[in.EntryIdx]] = struct{}{}
+			}
+		}
+		fmt.Printf("OOB DNS listener: %d queries received for %d unique entries (listener at %s)\n",
+			len(dnsInteractions), len(dnsHitEntries), oobDNSAddr)
+		for _, in := range dnsInteractions {
+			entryID := "<unknown>"
+			if in.EntryIdx >= 0 && in.EntryIdx < len(oobLsnrEntries) {
+				entryID = oobLsnrEntries[in.EntryIdx]
+			}
+			fmt.Printf("  [OOB-DNS callback] seq=%d entry=%s remote=%s name=%s type=%s\n",
+				in.Seq, entryID, in.RemoteIP, in.Name, in.Qtype)
 		}
 	}
 	if f.autoCalibrate > 0 {
@@ -1075,6 +1163,21 @@ func printHit(h hitRecord, showSecrets bool) {
 		fmt.Printf("    [finding] %s: %s = %s (confidence=%.0f%%)\n",
 			f.Type, f.Key, f.DisplayValue(showSecrets), f.Confidence*100)
 	}
+}
+
+// oobHost extracts the host part of an --oob-listen address string for use as
+// the DNS listener bind host. Empty or wildcard hosts (0.0.0.0, ::) are mapped
+// to 127.0.0.1 so the DNS listener defaults to loopback.
+func oobHost(addr string) string {
+	h, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// addr has no port; treat the whole thing as a host.
+		h = addr
+	}
+	if h == "" || h == "0.0.0.0" || h == "::" {
+		return "127.0.0.1"
+	}
+	return h
 }
 
 // oobParseEntryIdx extracts the per-entry index from a built-in listener
