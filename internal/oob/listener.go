@@ -41,6 +41,16 @@ type Interaction struct {
 	Technique Technique `json:"technique,omitempty"`
 }
 
+// hostOf extracts the IP/host portion from a host:port string. When the string
+// has no port (or SplitHostPort fails), it is returned unchanged. Used to strip
+// the port from RemoteAddr before recording it as an interaction's RemoteIP.
+func hostOf(addr string) string {
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		return h
+	}
+	return addr
+}
+
 // techniqueFromHost infers the OOB technique from a Host header by matching its
 // leading subdomain label against the labels Generate emits in label mode. It
 // strips any port and lowercases before matching. Returns the empty Technique
@@ -106,10 +116,7 @@ func (l *Listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = r.Body.Close()
 	}
 
-	ip := r.RemoteAddr
-	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		ip = h
-	}
+	ip := hostOf(r.RemoteAddr)
 
 	l.mu.Lock()
 	in := Interaction{

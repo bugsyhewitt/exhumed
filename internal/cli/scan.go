@@ -858,8 +858,9 @@ func runScan(f scanFlags) error {
 		total += requests
 		if rec != nil {
 			confirmed++
-			hits = append(hits, *rec)
 			if outFmt == output.FormatText {
+				// Collect for the final summary banner; also print inline.
+				hits = append(hits, *rec)
 				printHit(*rec, f.showSecrets)
 			} else {
 				structWriter.AddHit(rec.entryID, rec.path, rec.technique, rec.status,
@@ -960,8 +961,9 @@ func runScan(f scanFlags) error {
 			total += requests
 			if rec != nil {
 				confirmed++
-				hits = append(hits, *rec)
 				if outFmt == output.FormatText {
+					// Collect for the final summary banner; also print inline.
+					hits = append(hits, *rec)
 					fmt.Printf("[CHAIN-HIT depth=%d via=%s]\n", tgt.Depth, tgt.FromFinding)
 					printHit(*rec, f.showSecrets)
 				} else {
@@ -1048,6 +1050,49 @@ func runScan(f scanFlags) error {
 	return nil
 }
 
+// emitUnconfirmed reports whether an unconfirmed response should be printed in
+// text mode. It is false in all structured output modes (json/csv/sarif), when
+// --only-hits is set, when any positive match gate rejects the response, or when
+// any suppression filter matches the response.
+//
+// Match gates (all must pass to keep): matchFilter, codeMatcher, sizeMatcher,
+// timeMatcher, wordMatcher, lineMatcher, headerMatcher, bodyJSONMatcher, titleMatcher.
+//
+// Suppression filters (any match → drop): sizeFilter, codeFilter, bodyFilter,
+// timeFilter, wordFilter, lineFilter, headerFilter, titleFilter, bodyJSONFilter.
+//
+// Confirmed hits are never routed through this function.
+func emitUnconfirmed(f scanFlags, r engine.Result) bool {
+	if f.outFmt != output.FormatText || f.onlyHits {
+		return false
+	}
+	// Match gates — all nine must pass.
+	if !f.matchFilter.Keep(r.Body) ||
+		!f.codeMatcher.Keep(r.StatusCode) ||
+		!f.sizeMatcher.Keep(len(r.Body)) ||
+		!f.timeMatcher.Keep(r.Elapsed) ||
+		!f.wordMatcher.KeepBody(r.Body) ||
+		!f.lineMatcher.KeepBody(r.Body) ||
+		!f.headerMatcher.Keep(r.Headers) ||
+		!f.bodyJSONMatcher.Keep(r.Body) ||
+		!f.titleMatcher.KeepBody(r.Body) {
+		return false
+	}
+	// Suppression filters — none may match.
+	if f.sizeFilter.Match(len(r.Body)) ||
+		f.codeFilter.Match(r.StatusCode) ||
+		f.bodyFilter.Match(r.Body) ||
+		f.timeFilter.Match(r.Elapsed) ||
+		f.wordFilter.MatchBody(r.Body) ||
+		f.lineFilter.MatchBody(r.Body) ||
+		f.headerFilter.Match(r.Headers) ||
+		f.titleFilter.MatchBody(r.Body) ||
+		f.bodyJSONFilter.MatchBody(r.Body) {
+		return false
+	}
+	return true
+}
+
 // scanEntry fires all traversal payloads for one entry and returns the first
 // confirmed hit (if any) plus the total request count.
 func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f scanFlags, entry db.CompiledEntry) (*hitRecord, int) {
@@ -1091,35 +1136,10 @@ func scanEntry(ctx context.Context, eng *engine.Engine, tmpl engine.Request, f s
 				elapsed:   r.Elapsed,
 			}, len(results)
 		}
-		// Unconfirmed response: emit unless --only-hits silences everything,
-		// --match-regex is active and this body does NOT match the require-regex,
-		// --match-code is active and this status is NOT in the allowlist,
-		// --match-size is active and this body length is NOT in the allowlist,
-		// --match-time is active and this round-trip duration does NOT satisfy a
-		// require-bound, --match-words is active and this body's word count is NOT
-		// in the allowlist, --match-lines is active and this body's line count is
-		// NOT in the allowlist, --match-headers is active and this response's headers
-		// do NOT satisfy every require rule, --match-body-json is active and this
-		// response's decoded JSON does NOT satisfy every json.path require rule,
-		// --match-title is active and the title extracted from this body does NOT
-		// satisfy every require regex (the nine positive keep-gates, applied first
-		// as a conjunction), --filter-size
-		// flags this body length as known noise,
-		// --filter-code flags this status code as known noise, --filter-regex
-		// matches this body's content as known noise, --filter-time flags this
-		// round-trip duration as known noise, --filter-words flags this body's
-		// word count as known noise, --filter-lines flags this body's line count
-		// as known noise, --filter-headers flags this response's header block as
-		// known noise, --filter-title flags this response's HTML <title> as
-		// known noise, or --filter-body-json flags this response's decoded JSON as
-		// known noise at a named path. Confirmed hits (handled above) are never
-		// affected by any of these gates.
-		// The "[responded]" stream is human chatter for the interactive text
-		// mode only — in json/csv mode the sole stdout artifact is the structured
-		// document written at finalise, so emitting these lines would corrupt it
-		// (and they are not part of either machine schema). The match/filter gates
-		// still apply in text mode exactly as before.
-		if f.outFmt == output.FormatText && !f.onlyHits && f.matchFilter.Keep(r.Body) && f.codeMatcher.Keep(r.StatusCode) && f.sizeMatcher.Keep(len(r.Body)) && f.timeMatcher.Keep(r.Elapsed) && f.wordMatcher.KeepBody(r.Body) && f.lineMatcher.KeepBody(r.Body) && f.headerMatcher.Keep(r.Headers) && f.bodyJSONMatcher.Keep(r.Body) && f.titleMatcher.KeepBody(r.Body) && !f.sizeFilter.Match(len(r.Body)) && !f.codeFilter.Match(r.StatusCode) && !f.bodyFilter.Match(r.Body) && !f.timeFilter.Match(r.Elapsed) && !f.wordFilter.MatchBody(r.Body) && !f.lineFilter.MatchBody(r.Body) && !f.headerFilter.Match(r.Headers) && !f.titleFilter.MatchBody(r.Body) && !f.bodyJSONFilter.MatchBody(r.Body) {
+		// Unconfirmed response: emit in text mode when it passes the active
+		// match/filter gates. See emitUnconfirmed for the full decision logic.
+		// Confirmed hits (handled above) are never affected by any of these gates.
+		if emitUnconfirmed(f, r) {
 			fmt.Printf("[responded] entry=%s technique=%s status=%d bytes=%d confidence=%q\n",
 				entry.Entry.ID, tech, r.StatusCode, len(r.Body), d.Confidence)
 		}

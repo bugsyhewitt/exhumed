@@ -71,15 +71,16 @@ type sarifArtifactLocation struct {
 }
 
 // sarifHitRecord holds a single confirmed hit awaiting SARIF serialisation.
+// showSecrets is intentionally absent: SARIF emits finding types/counts, never
+// raw values, so redaction does not apply to the SARIF output path.
 type sarifHitRecord struct {
-	entryID     string
-	path        string
-	technique   string
-	status      int
-	elapsed     time.Duration
-	findings    []extract.Finding
-	showSecrets bool
-	chainDepth  int
+	entryID    string
+	path       string
+	technique  string
+	status     int
+	elapsed    time.Duration
+	findings   []extract.Finding
+	chainDepth int
 }
 
 // SARIFWriter collects confirmed hits and renders a SARIF 2.1.0 document on
@@ -97,18 +98,19 @@ func NewSARIFWriter(target string, _ time.Time) *SARIFWriter {
 	return &SARIFWriter{target: target}
 }
 
-// AddHit records a confirmed hit for later SARIF serialisation.
+// AddHit records a confirmed hit for later SARIF serialisation. showSecrets is
+// accepted for interface compatibility but unused: SARIF emits finding types and
+// counts, never raw values, so redaction does not apply here.
 func (w *SARIFWriter) AddHit(entryID, path, technique string, status int, elapsed time.Duration,
-	_ []string, findings []extract.Finding, showSecrets bool, chainDepth int) {
+	_ []string, findings []extract.Finding, _ bool, chainDepth int) {
 	w.hits = append(w.hits, sarifHitRecord{
-		entryID:     entryID,
-		path:        path,
-		technique:   technique,
-		status:      status,
-		elapsed:     elapsed,
-		findings:    findings,
-		showSecrets: showSecrets,
-		chainDepth:  chainDepth,
+		entryID:    entryID,
+		path:       path,
+		technique:  technique,
+		status:     status,
+		elapsed:    elapsed,
+		findings:   findings,
+		chainDepth: chainDepth,
 	})
 }
 
@@ -227,9 +229,9 @@ func sarifRuleName(entryID string) string {
 		if len(p) == 0 {
 			continue
 		}
-		rs := []rune(p)
-		rs[0] = unicode.ToUpper(rs[0])
-		sb.WriteString(string(rs))
+		// Entry IDs are ASCII; write the uppercased first byte then the rest.
+		sb.WriteRune(unicode.ToUpper(rune(p[0])))
+		sb.WriteString(p[1:])
 	}
 	return sb.String()
 }

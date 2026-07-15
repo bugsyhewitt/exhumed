@@ -60,11 +60,7 @@ func NewDNSListener(onInteraction func(DNSInteraction)) *DNSListener {
 // DNSInteraction and answered with a minimal NOERROR reply (no answer records)
 // to prevent resolver timeouts while the interaction is logged.
 func (l *DNSListener) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	remoteAddr := w.RemoteAddr().String()
-	remoteIP, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		remoteIP = remoteAddr
-	}
+	remoteIP := hostOf(w.RemoteAddr().String())
 
 	var name, qtype string
 	if len(r.Question) > 0 {

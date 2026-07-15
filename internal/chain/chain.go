@@ -4,6 +4,7 @@
 package chain
 
 import (
+	"path"
 	"sync"
 
 	"github.com/bugsyhewitt/exhumed/internal/extract"
@@ -100,6 +101,17 @@ var webConfigTargets = []string{
 	".htpasswd",
 }
 
+// homeCredentialTargets lists relative paths probed under a discovered home
+// directory regardless of how that directory was found (unix-passwd user entry
+// or HOME env-var). Callers append additional paths specific to their finding
+// type (e.g. FindingTypeUser adds .mysql_history; FindingTypeInfo/HOME adds .env).
+var homeCredentialTargets = []string{
+	".ssh/id_rsa",
+	".ssh/authorized_keys",
+	".aws/credentials",
+	".bash_history",
+}
+
 // generateTargets applies generation rules for one finding.
 func (q *Queue) generateTargets(f extract.Finding) {
 	nextDepth := f.Depth + 1
@@ -114,11 +126,10 @@ func (q *Queue) generateTargets(f extract.Finding) {
 			return
 		}
 		provenance := "user:" + f.Key + " from " + f.Source
-		q.add(home+"/.ssh/id_rsa", provenance, nextDepth)
-		q.add(home+"/.ssh/authorized_keys", provenance, nextDepth)
-		q.add(home+"/.bash_history", provenance, nextDepth)
-		q.add(home+"/.mysql_history", provenance, nextDepth)
-		q.add(home+"/.aws/credentials", provenance, nextDepth)
+		for _, rel := range homeCredentialTargets {
+			q.add(home+"/"+rel, provenance, nextDepth)
+		}
+		q.add(home+"/.mysql_history", provenance, nextDepth) // user-specific
 
 	case extract.FindingTypeGitConfig:
 		provenance := "git-config from " + f.Source
@@ -149,28 +160,29 @@ func (q *Queue) generateTargets(f extract.Finding) {
 				q.add(root+"/"+rel, provenance, nextDepth)
 			}
 		case "HOME":
-			q.add(root+"/.ssh/id_rsa", provenance, nextDepth)
-			q.add(root+"/.ssh/authorized_keys", provenance, nextDepth)
-			q.add(root+"/.aws/credentials", provenance, nextDepth)
-			q.add(root+"/.bash_history", provenance, nextDepth)
-			q.add(root+"/.env", provenance, nextDepth)
+			for _, rel := range homeCredentialTargets {
+				q.add(root+"/"+rel, provenance, nextDepth)
+			}
+			q.add(root+"/.env", provenance, nextDepth) // env-specific
 		}
 	}
 }
 
-// isAbsPath reports whether s looks like an absolute filesystem path.
+// isAbsPath reports whether s is an absolute filesystem path and long enough
+// to be a meaningful root (bare "/" is excluded as a chain target).
 func isAbsPath(s string) bool {
-	return len(s) > 1 && s[0] == '/'
+	return len(s) > 1 && path.IsAbs(s)
 }
 
 // gitDirFrom resolves the .git directory from a .git/config source path.
 // E.g. "/var/www/html/.git/config" → "/var/www/html/.git"
 func gitDirFrom(source string) string {
-	// Strip trailing "/config" if present.
-	const suffix = "/config"
-	if len(source) > len(suffix) && source[len(source)-len(suffix):] == suffix {
-		return source[:len(source)-len(suffix)]
+	if source == "" {
+		return ".git"
 	}
-	// Fall back to a relative .git path.
-	return ".git"
+	dir := path.Dir(source)
+	if dir == "." || dir == "/" {
+		return ".git"
+	}
+	return dir
 }
