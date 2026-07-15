@@ -1,6 +1,7 @@
 // Package output provides structured output formatting for exhumed scan results.
-// It supports three modes: text (human-readable, default), json (machine-readable),
-// and csv (spreadsheet/grep-friendly, one row per confirmed finding).
+// It supports four modes: text (human-readable, default), json (machine-readable),
+// csv (spreadsheet/grep-friendly, one row per confirmed finding), and sarif
+// (SARIF 2.1.0 for CI/code-scanning integration).
 //
 // JSON and CSV output are emitted as a single document written to stdout after the
 // scan completes. Text output is written incrementally as hits are found.
@@ -26,6 +27,9 @@ const (
 	// FormatCSV emits a CSV document (one row per confirmed finding) after the
 	// scan completes.
 	FormatCSV Format = "csv"
+	// FormatSARIF emits a SARIF 2.1.0 JSON document after the scan completes,
+	// suitable for ingestion by GitHub Code Scanning and other CI security tools.
+	FormatSARIF Format = "sarif"
 )
 
 // ParseFormat parses a format string, returning an error on unrecognised values.
@@ -37,8 +41,10 @@ func ParseFormat(s string) (Format, error) {
 		return FormatJSON, nil
 	case "csv":
 		return FormatCSV, nil
+	case "sarif":
+		return FormatSARIF, nil
 	default:
-		return "", fmt.Errorf("unknown output format %q: valid values are text, json, csv", s)
+		return "", fmt.Errorf("unknown output format %q: valid values are text, json, csv, sarif", s)
 	}
 }
 

@@ -372,7 +372,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().IntVar(&f.maxDepth, "max-depth", 3, "Max follow-on chain depth (0 = disable chaining)")
 	cmd.Flags().IntVar(&f.maxTargets, "max-targets", 500, "Hard cap on total follow-on targets")
 	cmd.Flags().StringVar(&f.dbPath, "db", defaultDBPath, "Path to database root (defaults to the freshest of the bundled DB and the feed cache)")
-	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text, json, or csv. csv emits one row per confirmed finding (header row first), suitable for spreadsheets or grep/cut pipelines; like json it is written to stdout after the scan completes and only ever contains confirmed hits.")
+	cmd.Flags().StringVar(&f.outputFormat, "output", "text", "Output format: text, json, csv, or sarif. csv emits one row per confirmed finding (header row first), suitable for spreadsheets or grep/cut pipelines; like json it is written to stdout after the scan completes and only ever contains confirmed hits. sarif emits a SARIF 2.1.0 JSON document suitable for GitHub Code Scanning (upload-sarif action) and other CI security-tool integrations.")
 	cmd.Flags().StringVar(&f.resume, "resume", "", "Persist per-entry progress to this file and skip already-attempted entries on restart")
 	cmd.Flags().StringVar(&f.pathsFile, "paths-file", "", "Scan additional file paths from a SecLists-style wordlist (one path per line; '#' comments and blanks ignored)")
 	cmd.Flags().StringSliceVar(&f.extensions, "extensions", nil, "Append file extensions to each --paths-file entry (ffuf -e workflow), e.g. '.php,.bak,.old'. A leading dot is optional. Requires --paths-file.")
@@ -796,6 +796,8 @@ func runScan(f scanFlags) error {
 		structWriter = output.NewJSONWriter(f.url, scanStart)
 	case output.FormatCSV:
 		structWriter = output.NewCSVWriter(f.url, scanStart)
+	case output.FormatSARIF:
+		structWriter = output.NewSARIFWriter(f.url, scanStart)
 	}
 
 	var hits []hitRecord
