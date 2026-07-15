@@ -139,6 +139,106 @@ func TestChain_GitConfigGeneratesFollowons(t *testing.T) {
 	}
 }
 
+func TestChain_DocumentRootGeneratesWebConfigTargets(t *testing.T) {
+	q := chain.New(chain.Config{MaxDepth: 3, MaxTargets: 100})
+	q.Enqueue([]extract.Finding{
+		{
+			Type:   extract.FindingTypeInfo,
+			Key:    "DOCUMENT_ROOT",
+			Value:  "/var/www/html",
+			Source: "/proc/self/environ",
+			Depth:  0,
+		},
+	})
+	paths := targetPaths(q.Targets())
+	expected := []string{
+		"/var/www/html/.env",
+		"/var/www/html/config.php",
+		"/var/www/html/wp-config.php",
+		"/var/www/html/.git/config",
+	}
+	for _, want := range expected {
+		if !contains(paths, want) {
+			t.Errorf("expected %q in targets after DOCUMENT_ROOT chain; got: %v", want, paths)
+		}
+	}
+}
+
+func TestChain_PWDGeneratesWebConfigTargets(t *testing.T) {
+	q := chain.New(chain.Config{MaxDepth: 3, MaxTargets: 100})
+	q.Enqueue([]extract.Finding{
+		{
+			Type:   extract.FindingTypeInfo,
+			Key:    "PWD",
+			Value:  "/srv/app",
+			Source: "/proc/self/environ",
+			Depth:  0,
+		},
+	})
+	paths := targetPaths(q.Targets())
+	if !contains(paths, "/srv/app/.env") {
+		t.Errorf("expected /srv/app/.env from PWD chain; got: %v", paths)
+	}
+	if !contains(paths, "/srv/app/settings.py") {
+		t.Errorf("expected /srv/app/settings.py from PWD chain; got: %v", paths)
+	}
+}
+
+func TestChain_HomeInfoGeneratesCredentialTargets(t *testing.T) {
+	q := chain.New(chain.Config{MaxDepth: 3, MaxTargets: 100})
+	q.Enqueue([]extract.Finding{
+		{
+			Type:   extract.FindingTypeInfo,
+			Key:    "HOME",
+			Value:  "/var/www",
+			Source: "/proc/self/environ",
+			Depth:  0,
+		},
+	})
+	paths := targetPaths(q.Targets())
+	for _, want := range []string{
+		"/var/www/.ssh/id_rsa",
+		"/var/www/.aws/credentials",
+		"/var/www/.bash_history",
+	} {
+		if !contains(paths, want) {
+			t.Errorf("expected %q from HOME info chain; got: %v", want, paths)
+		}
+	}
+}
+
+func TestChain_InfoRelativePathIgnored(t *testing.T) {
+	q := chain.New(chain.Config{MaxDepth: 3, MaxTargets: 100})
+	// A relative or empty PATH value must not generate targets.
+	q.Enqueue([]extract.Finding{
+		{Type: extract.FindingTypeInfo, Key: "DOCUMENT_ROOT", Value: "relative/path", Source: "/proc/self/environ", Depth: 0},
+		{Type: extract.FindingTypeInfo, Key: "DOCUMENT_ROOT", Value: "", Source: "/proc/self/environ", Depth: 0},
+		{Type: extract.FindingTypeInfo, Key: "PATH", Value: "/usr/local/sbin:/usr/local/bin", Source: "/proc/self/environ", Depth: 0},
+	})
+	if got := len(q.Targets()); got != 0 {
+		t.Errorf("expected 0 targets for relative/empty/PATH values, got %d: %v", got, targetPaths(q.Targets()))
+	}
+}
+
+func TestChain_InfoProvenanceRecorded(t *testing.T) {
+	q := chain.New(chain.Config{MaxDepth: 3, MaxTargets: 100})
+	q.Enqueue([]extract.Finding{
+		{Type: extract.FindingTypeInfo, Key: "DOCUMENT_ROOT", Value: "/app", Source: "/proc/self/environ", Depth: 0},
+	})
+	for _, tgt := range q.Targets() {
+		if tgt.Path == "/app/.env" {
+			if tgt.FromFinding == "" {
+				t.Error("expected provenance (FromFinding) to be set for info-chain target")
+			}
+			if tgt.Depth != 1 {
+				t.Errorf("expected depth=1, got %d", tgt.Depth)
+			}
+			return
+		}
+	}
+	t.Error("/app/.env not found in targets")
+}
+
 // helpers
 
 func targetPaths(targets []chain.Target) []string {
