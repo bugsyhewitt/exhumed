@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,6 +95,7 @@ type scanFlags struct {
 	matchBodyJSON  []string
 	matchTitle     []string
 	oob            string        // collaborator domain for out-of-band payloads
+	oobListenAddr  string        // --oob-listen: start built-in HTTP callback listener here
 	maxTime        time.Duration // global wall-clock scan limit; 0 = unlimited
 	maxRequests    int           // global HTTP request cap; 0 = unlimited
 
@@ -392,6 +394,7 @@ from home dirs, etc.) up to --max-depth generations.`,
 	cmd.Flags().StringArrayVar(&f.matchTitle, "match-title", nil, "Keep only unconfirmed responses whose HTML <title> matches. Repeatable; each value is one Go (RE2) regex applied as an unanchored 'contains' match against the extracted title (entity-decoded, whitespace-collapsed), e.g. --match-title '(?i)index of' --match-title '(?i)passwd|shadow|hosts'. Multiple rules compose as a conjunction (all must match). Unlike --match-regex, which scans the raw body bytes and can fire on a term embedded in a soft-404's chrome (nav bar, footer, generic error text), --match-title pins the keep-gate to one semantically meaningful field of an HTML response — the document title — so a real file read rendered inside an 'Index of /etc' / 'passwd' chrome survives while the uniform 'Not Found' / 'Access denied' noise (whose title is constant even when body length, word count, status, and headers wobble) is dropped. A non-HTML body, a body with no closed <title> element, or a truncated body never matches. The match gates run before the --filter-* suppressors; composes with the other --match-* gates (all must pass). Confirmed hits are always reported regardless.")
 
 	cmd.Flags().StringVar(&f.oob, "oob", "", "Fire out-of-band (OOB) payloads at every scan entry, pointing at this collaborator domain (e.g. 'xyz123.oast.fun'). Generates SMB-UNC, HTTP-wrapper, HTTPS-wrapper, and DNS-resolve variants via the same injection surfaces as the traversal payloads. The target's outbound interaction with the collaborator proves blind LFI even when the HTTP response reflects nothing. Requires a pre-configured collaborator: interactsh-client, Burp Collaborator, or any HTTP/DNS log you control. OOB payloads are fired alongside — not instead of — traversal payloads; the regular confirm logic is unaffected. Use --verbose to see each OOB payload fired.")
+	cmd.Flags().StringVar(&f.oobListenAddr, "oob-listen", "", "Start a built-in HTTP listener on this address (e.g. ':8888' or '127.0.0.1:9090') before scanning and inject a unique per-entry callback URL into each scan entry. When the target dereferences the injected URL (as happens in blind LFI sinks where the app reads or includes a file but never reflects its contents), the listener records the interaction and automatically correlates it to the entry that triggered it. After scanning, a summary is printed listing every callback received and the entry it corresponds to. Unlike --oob (which points payloads at an external collaborator), --oob-listen requires no external service and produces instant, correlated results for HTTP callbacks. DNS and SMB interactions are not captured by the built-in listener; for those, use --oob with an external collaborator. The two flags may be combined.")
 	cmd.Flags().DurationVar(&f.maxTime, "max-time", 0, "Stop the scan after this wall-clock duration (e.g. '30m', '2h'). When the limit expires the current batch of in-flight requests completes, the results already collected are printed in full, and the process exits cleanly. The scan state file (--resume) is saved so the remaining entries can be picked up in a subsequent run. 0 (the default) means no limit — the scan runs to completion.")
 	cmd.Flags().IntVar(&f.maxRequests, "max-requests", 0, "Stop the scan once this many HTTP requests have been dispatched (e.g. '--max-requests 500'). The current batch of in-flight requests completes before the scan halts; partial results collected so far are printed in full. When --resume is active the state file is saved at this point so remaining entries can be retried later. 0 (the default) means no cap — the scan runs to completion. Useful for rate-limited bug-bounty programmes with per-day request quotas and for quick triage scans where you want a fast signal without walking the entire database.")
 
@@ -523,6 +526,43 @@ func runScan(f scanFlags) error {
 			}
 		}
 	}
+
+	// --oob-listen: start the built-in HTTP collaborator so blind-LFI callbacks
+	// are captured and correlated in-process without an external service.
+	var (
+		oobLsnr        *oob.Listener
+		oobLsnrBase    string   // "http://host:port" — base URL injected into payloads
+		oobLsnrCancel  context.CancelFunc
+		oobLsnrEntries []string // entry index → entry ID, for post-scan correlation
+	)
+	if f.oobListenAddr != "" {
+		oobLsnr = oob.NewListener(nil)
+		lsnrCtx, cancel := context.WithCancel(context.Background())
+		oobLsnrCancel = cancel
+		readyCh := make(chan string, 1)
+		lsnrErrCh := make(chan error, 1)
+		go func() {
+			if serveErr := oobLsnr.Serve(lsnrCtx, f.oobListenAddr, func(addr string) {
+				readyCh <- addr
+			}); serveErr != nil {
+				lsnrErrCh <- serveErr
+			}
+		}()
+		select {
+		case boundAddr := <-readyCh:
+			oobLsnrBase = "http://" + boundAddr
+			if f.verbose && outFmt == output.FormatText {
+				fmt.Fprintf(os.Stderr, "[*] OOB listener started at %s\n", oobLsnrBase)
+			}
+		case lsnrErr := <-lsnrErrCh:
+			return fmt.Errorf("--oob-listen: %w", lsnrErr)
+		}
+	}
+	defer func() {
+		if oobLsnrCancel != nil {
+			oobLsnrCancel()
+		}
+	}()
 
 	if !strings.Contains(f.url, f.marker) && !strings.Contains(f.data, f.marker) {
 		return fmt.Errorf("marker %q not found in --url or --data; add it at the injection point", f.marker)
@@ -802,6 +842,24 @@ func runScan(f scanFlags) error {
 			}
 		}
 
+		// Fire a per-entry HTTP payload at the built-in OOB listener when
+		// --oob-listen is set. Each entry gets a unique path (/e/<idx>) so
+		// any interaction the target sends back can be correlated to this entry.
+		if oobLsnr != nil {
+			entryIdx := len(oobLsnrEntries)
+			oobLsnrEntries = append(oobLsnrEntries, entry.Entry.ID)
+			entryURL := fmt.Sprintf("%s/e/%d", oobLsnrBase, entryIdx)
+			lsnrReq := inject.Substitute(tmpl, f.marker, entryURL)
+			lsnrResults := eng.Run(ctx, []engine.Request{lsnrReq})
+			if f.verbose && outFmt == output.FormatText {
+				if lsnrResults[0].Err != nil {
+					fmt.Fprintf(os.Stderr, "[!] oob-listen entry=%s: %v\n", entry.Entry.ID, lsnrResults[0].Err)
+				} else {
+					fmt.Fprintf(os.Stderr, "[*] oob-listen: fired for entry=%s → %s\n", entry.Entry.ID, entryURL)
+				}
+			}
+		}
+
 		// Persist progress: mark this entry attempted and flush atomically.
 		if state != nil {
 			var sh *scanstate.Hit
@@ -863,6 +921,27 @@ func runScan(f scanFlags) error {
 	if oobFired > 0 {
 		fmt.Printf("OOB payloads fired: %d → check collaborator %s for interactions\n",
 			oobFired, f.oob)
+	}
+	if oobLsnr != nil {
+		oobLsnrCancel()
+		oobLsnrCancel = nil
+		interactions := oobLsnr.Interactions()
+		hitEntries := make(map[string]struct{})
+		for _, in := range interactions {
+			if idx := oobParseEntryIdx(in.Path); idx >= 0 && idx < len(oobLsnrEntries) {
+				hitEntries[oobLsnrEntries[idx]] = struct{}{}
+			}
+		}
+		fmt.Printf("OOB listener: %d callbacks received for %d unique entries (listener at %s)\n",
+			len(interactions), len(hitEntries), oobLsnrBase)
+		for _, in := range interactions {
+			entryID := "<unknown>"
+			if idx := oobParseEntryIdx(in.Path); idx >= 0 && idx < len(oobLsnrEntries) {
+				entryID = oobLsnrEntries[idx]
+			}
+			fmt.Printf("  [OOB callback] seq=%d entry=%s remote=%s method=%s\n",
+				in.Seq, entryID, in.RemoteIP, in.Method)
+		}
 	}
 	if f.autoCalibrate > 0 {
 		fmt.Printf("Auto-calibrate: target=%s  final rate=%.2f req/s\n",
@@ -996,4 +1075,18 @@ func printHit(h hitRecord, showSecrets bool) {
 		fmt.Printf("    [finding] %s: %s = %s (confidence=%.0f%%)\n",
 			f.Type, f.Key, f.DisplayValue(showSecrets), f.Confidence*100)
 	}
+}
+
+// oobParseEntryIdx extracts the per-entry index from a built-in listener
+// callback path of the form /e/<idx>. Returns -1 if the path does not match.
+func oobParseEntryIdx(path string) int {
+	const prefix = "/e/"
+	if !strings.HasPrefix(path, prefix) {
+		return -1
+	}
+	n, err := strconv.Atoi(strings.TrimPrefix(path, prefix))
+	if err != nil || n < 0 {
+		return -1
+	}
+	return n
 }
