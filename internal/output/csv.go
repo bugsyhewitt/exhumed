@@ -57,36 +57,13 @@ func NewCSVWriter(_ string, _ time.Time) *CSVWriter {
 // does, so a CSV export never leaks a secret a JSON export would have masked.
 func (w *CSVWriter) AddHit(entryID, path, technique string, status int, elapsed time.Duration,
 	snippets []string, findings []extract.Finding, showSecrets bool, chainDepth int) {
-	h := HitJSON{
-		EntryID:    entryID,
-		Path:       path,
-		Technique:  technique,
-		StatusCode: status,
-		ElapsedMs:  elapsed.Milliseconds(),
-		Snippets:   snippets,
-		Chain:      chainDepth > 0,
-		ChainDepth: chainDepth,
-	}
+	h := newHitJSON(entryID, path, technique, status, elapsed, snippets, chainDepth)
 	if len(findings) == 0 {
 		w.rows = append(w.rows, csvRow{hit: h})
 		return
 	}
 	for _, f := range findings {
-		val := f.Value
-		redacted := false
-		if f.Redacted && !showSecrets {
-			val = "***REDACTED***"
-			redacted = true
-		}
-		fj := FindingJSON{
-			Type:       string(f.Type),
-			Key:        f.Key,
-			Value:      val,
-			Redacted:   redacted,
-			Source:     f.Source,
-			Confidence: f.Confidence,
-			Depth:      f.Depth,
-		}
+		fj := findingToJSON(f, showSecrets)
 		w.rows = append(w.rows, csvRow{hit: h, finding: &fj})
 	}
 }

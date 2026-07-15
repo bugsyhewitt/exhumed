@@ -127,10 +127,13 @@ func NewJSONWriter(target string, startedAt time.Time) *JSONWriter {
 	}
 }
 
-// AddHit records a confirmed hit.
-func (w *JSONWriter) AddHit(entryID, path, technique string, status int, elapsed time.Duration,
-	snippets []string, findings []extract.Finding, showSecrets bool, chainDepth int) {
-	h := HitJSON{
+// newHitJSON builds the shared HitJSON record from AddHit parameters. The
+// returned value carries no findings; callers append those separately.
+// Centralising construction here means the Chain/ChainDepth derivation rule
+// (Chain == chainDepth > 0) lives in exactly one place.
+func newHitJSON(entryID, path, technique string, status int, elapsed time.Duration,
+	snippets []string, chainDepth int) HitJSON {
+	return HitJSON{
 		EntryID:    entryID,
 		Path:       path,
 		Technique:  technique,
@@ -140,23 +143,37 @@ func (w *JSONWriter) AddHit(entryID, path, technique string, status int, elapsed
 		Chain:      chainDepth > 0,
 		ChainDepth: chainDepth,
 	}
+}
+
+// findingToJSON converts an extract.Finding to its JSON representation, applying
+// redaction when showSecrets is false and the finding is marked sensitive. It is
+// the single conversion point shared by all structured writers (JSON, CSV, SARIF)
+// so the redaction rule cannot diverge between output formats.
+func findingToJSON(f extract.Finding, showSecrets bool) FindingJSON {
+	val := f.Value
+	redacted := false
+	if f.Redacted && !showSecrets {
+		val = "***REDACTED***"
+		redacted = true
+	}
+	return FindingJSON{
+		Type:       string(f.Type),
+		Key:        f.Key,
+		Value:      val,
+		Redacted:   redacted,
+		Source:     f.Source,
+		Confidence: f.Confidence,
+		Extra:      f.Extra,
+		Depth:      f.Depth,
+	}
+}
+
+// AddHit records a confirmed hit.
+func (w *JSONWriter) AddHit(entryID, path, technique string, status int, elapsed time.Duration,
+	snippets []string, findings []extract.Finding, showSecrets bool, chainDepth int) {
+	h := newHitJSON(entryID, path, technique, status, elapsed, snippets, chainDepth)
 	for _, f := range findings {
-		val := f.Value
-		redacted := false
-		if f.Redacted && !showSecrets {
-			val = "***REDACTED***"
-			redacted = true
-		}
-		h.Findings = append(h.Findings, FindingJSON{
-			Type:       string(f.Type),
-			Key:        f.Key,
-			Value:      val,
-			Redacted:   redacted,
-			Source:     f.Source,
-			Confidence: f.Confidence,
-			Extra:      f.Extra,
-			Depth:      f.Depth,
-		})
+		h.Findings = append(h.Findings, findingToJSON(f, showSecrets))
 	}
 	w.result.Hits = append(w.result.Hits, h)
 }
