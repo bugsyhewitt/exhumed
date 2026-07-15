@@ -26,8 +26,8 @@ follow-on targeting...
 
 ## Status
 
-**Under active development — pre-v1.0.** APIs and output formats may change
-between packets. Do not depend on stability yet.
+**Released as v1.0.0.** APIs are production-stable. Future feature work
+ships as v1.1+ minor releases.
 
 ---
 
@@ -44,7 +44,7 @@ CGO_ENABLED=0 go build -o exhumed ./cmd/exhumed
 
 # release build with version metadata
 CGO_ENABLED=0 go build \
-  -ldflags "-X github.com/bugsyhewitt/exhumed/internal/version.Version=0.1.0 \
+  -ldflags "-X github.com/bugsyhewitt/exhumed/internal/version.Version=1.0.0 \
             -X github.com/bugsyhewitt/exhumed/internal/version.Commit=$(git rev-parse --short HEAD) \
             -X github.com/bugsyhewitt/exhumed/internal/version.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   -o exhumed ./cmd/exhumed
