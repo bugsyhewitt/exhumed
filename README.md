@@ -1344,6 +1344,40 @@ exhumed payload oob --domain c.example.com --label
 exhumed payload oob listen --addr :8080 --json
 ```
 
+#### Built-in DNS listener (scan `--oob-dns-port`)
+
+Pair `--oob-listen` with `--oob-dns-port` to also capture **DNS callbacks** from
+the same scan. When a Windows or SMB-aware sink dereferences a UNC path (e.g.
+`\\cb-3.oob.local\share`), the OS resolves the hostname via DNS before attempting
+any network connect. The built-in UDP DNS listener captures that query, correlates
+it to the triggering scan entry via the `cb-<idx>` label, and prints it in the
+post-scan summary.
+
+```bash
+# HTTP + DNS listeners together — captures both HTTP fetches and DNS lookups
+exhumed scan --url "http://target.local/?file=FUZZ" \
+             --oob-listen 127.0.0.1:8888 \
+             --oob-dns-port 5353
+```
+
+```
+[*] OOB HTTP listener started at http://127.0.0.1:8888
+[*] OOB DNS listener started at 127.0.0.1:5353
+...
+── Scan complete ──────────────────────────────────────
+Requests: 76  |  Confirmed readable: 0  |  Chain targets: 0
+OOB HTTP listener: 4 callbacks received for 4 unique entries (listener at http://127.0.0.1:8888)
+  [OOB-HTTP callback] seq=1 entry=passwd remote=10.0.0.5 method=GET
+OOB DNS listener: 2 queries received for 2 unique entries (listener at 127.0.0.1:5353)
+  [OOB-DNS callback] seq=1 entry=shadow remote=10.0.0.5 name=cb-1.oob.local. type=A
+```
+
+**Precondition:** For DNS callbacks to reach the listener, the target machine
+must use the listener's host as its DNS resolver (or you must configure a
+split-horizon that forwards `*.oob.local` to the listener). Port 5353 is used
+by default to avoid needing root privileges. Use port 0 in tests to get an
+OS-assigned free port. `--oob-dns-port` requires `--oob-listen`.
+
 ### Other commands
 
 ```bash
