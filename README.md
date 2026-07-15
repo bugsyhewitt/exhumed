@@ -1,5 +1,9 @@
 # exhumed
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/bugsyhewitt/bugsyhewitt.github.io/main/public/cards/exhumed.jpg" alt="exhumed" width="680">
+</p>
+
 > *Some files don't stay buried.*
 
 Modern LFI exploitation CLI and a revival of the abandoned `panoptic`.
