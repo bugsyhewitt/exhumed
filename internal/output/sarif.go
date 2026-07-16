@@ -16,8 +16,8 @@ import (
 // https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 
 type sarifDocument struct {
-	Schema  string    `json:"$schema"`
-	Version string    `json:"version"`
+	Schema  string     `json:"$schema"`
+	Version string     `json:"version"`
 	Runs    []sarifRun `json:"runs"`
 }
 

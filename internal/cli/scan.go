@@ -534,7 +534,7 @@ func runScan(f scanFlags) error {
 	// are captured and correlated in-process without an external service.
 	var (
 		oobLsnr        *oob.Listener
-		oobLsnrBase    string   // "http://host:port" — base URL injected into payloads
+		oobLsnrBase    string // "http://host:port" — base URL injected into payloads
 		oobLsnrCancel  context.CancelFunc
 		oobLsnrEntries []string // entry index → entry ID, for post-scan correlation (shared with DNS)
 	)

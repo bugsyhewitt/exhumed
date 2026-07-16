@@ -106,18 +106,18 @@ func TestScan_OOBListenReceivesCallback(t *testing.T) {
 	defer srv.Close()
 
 	f := scanFlags{
-		url:           srv.URL + "/?file=FUZZ",
-		marker:        "FUZZ",
-		method:        "GET",
-		concurrency:   1,
-		timeout:       5 * time.Second,
+		url:            srv.URL + "/?file=FUZZ",
+		marker:         "FUZZ",
+		method:         "GET",
+		concurrency:    1,
+		timeout:        5 * time.Second,
 		traversalDepth: 1,
-		dbPath:        curatedDBPath(t),
-		onlyHits:      true,
-		maxDepth:      0,
-		maxTargets:    0,
-		outputFormat:  "text",
-		oobListenAddr: "127.0.0.1:0",
+		dbPath:         curatedDBPath(t),
+		onlyHits:       true,
+		maxDepth:       0,
+		maxTargets:     0,
+		outputFormat:   "text",
+		oobListenAddr:  "127.0.0.1:0",
 	}
 
 	out := captureStdout(t, func() {
